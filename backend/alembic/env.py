@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.config import settings
 from app.database import Base
+from app import models
 
 target_metadata = Base.metadata
 
