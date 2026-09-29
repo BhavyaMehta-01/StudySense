@@ -22,3 +22,93 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user: SafeUserResponse
+
+from datetime import datetime, date
+from decimal import Decimal
+from typing import Optional, List
+
+class SemesterBase(BaseModel):
+    name: str
+    academic_year: str
+
+class SemesterCreate(SemesterBase):
+    pass
+
+class SemesterUpdate(BaseModel):
+    name: Optional[str] = None
+    academic_year: Optional[str] = None
+
+class SemesterResponse(SemesterBase):
+    id: UUID
+    user_id: UUID
+    created_at: datetime
+    updated_at: Optional[datetime]
+    class Config: from_attributes = True
+
+class SubjectBase(BaseModel):
+    name: str
+    code: Optional[str] = None
+    credits: Optional[Decimal] = None
+
+class SubjectCreate(SubjectBase):
+    pass
+
+class SubjectUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    credits: Optional[Decimal] = None
+
+class SubjectResponse(SubjectBase):
+    id: UUID
+    semester_id: UUID
+    created_at: datetime
+    updated_at: Optional[datetime]
+    class Config: from_attributes = True
+
+class AssessmentBase(BaseModel):
+    name: str
+    category: str
+    max_marks: Decimal
+    marks: Optional[Decimal] = None
+    weightage: Optional[Decimal] = None
+    scheduled_at: Optional[datetime] = None
+    status: Optional[str] = "pending"
+
+class AssessmentCreate(AssessmentBase):
+    pass
+
+class AssessmentUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    max_marks: Optional[Decimal] = None
+    marks: Optional[Decimal] = None
+    weightage: Optional[Decimal] = None
+    scheduled_at: Optional[datetime] = None
+    status: Optional[str] = None
+
+class AssessmentResponse(AssessmentBase):
+    id: UUID
+    subject_id: UUID
+    created_at: datetime
+    updated_at: Optional[datetime]
+    class Config: from_attributes = True
+
+class AttendanceBase(BaseModel):
+    classes_attended: int
+    classes_held: int
+    recorded_on: date
+
+class AttendanceCreate(AttendanceBase):
+    pass
+
+class AttendanceUpdate(BaseModel):
+    classes_attended: Optional[int] = None
+    classes_held: Optional[int] = None
+    recorded_on: Optional[date] = None
+
+class AttendanceResponse(AttendanceBase):
+    id: UUID
+    subject_id: UUID
+    created_at: datetime
+    updated_at: Optional[datetime]
+    class Config: from_attributes = True
