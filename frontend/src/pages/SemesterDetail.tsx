@@ -177,7 +177,10 @@ export default function SemesterDetail() {
             >
               <div className="mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {subject.name}
+                  <Link to={`/app/semesters/${semesterId}/subjects/${subject.id}`} className="focus:outline-none">
+                    <span className="absolute inset-0" aria-hidden="true" />
+                    {subject.name}
+                  </Link>
                 </h3>
                 <div className="flex gap-4 mt-1">
                   {subject.code && (

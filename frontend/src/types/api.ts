@@ -43,3 +43,17 @@ export interface Subject {
   created_at: string;
   updated_at: string | null;
 }
+
+export interface Assessment {
+  id: string;
+  name: string;
+  category: string;
+  max_marks: number;
+  marks: number | null;
+  weightage: number | null;
+  scheduled_at: string | null;
+  status: 'pending' | 'scored' | 'absent' | 'exempt';
+  subject_id: string;
+  created_at: string;
+  updated_at: string | null;
+}

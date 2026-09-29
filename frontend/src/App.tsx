@@ -7,6 +7,7 @@ import AppLayout from './layouts/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Semesters from './pages/Semesters';
 import SemesterDetail from './pages/SemesterDetail';
+import SubjectDetail from './pages/SubjectDetail';
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ export default function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="semesters" element={<Semesters />} />
               <Route path="semesters/:semesterId" element={<SemesterDetail />} />
+              <Route path="semesters/:semesterId/subjects/:subjectId" element={<SubjectDetail />} />
             </Route>
             
             <Route path="*" element={<Navigate to="/login" replace />} />
