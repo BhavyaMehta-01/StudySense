@@ -44,6 +44,16 @@ export interface Subject {
   updated_at: string | null;
 }
 
+export interface Attendance {
+  id: string;
+  classes_attended: number;
+  classes_held: number;
+  recorded_on: string;
+  subject_id: string;
+  created_at: string;
+  updated_at: string | null;
+}
+
 export interface Assessment {
   id: string;
   name: string;

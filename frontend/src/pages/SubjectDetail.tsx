@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/api/client';
-import type { Semester, Subject, Assessment } from '@/types/api';
+import type { Semester, Subject, Assessment, Attendance } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,11 +42,35 @@ const assessmentSchema = z.object({
 
 type AssessmentForm = z.infer<typeof assessmentSchema>;
 
+const attendanceSchema = z.object({
+  classes_attended: z.string().min(1, 'Classes attended is required'),
+  classes_held: z.string().min(1, 'Classes held is required'),
+  recorded_on: z.string().min(1, 'Date is required'),
+}).superRefine((data, ctx) => {
+  const attended = Number(data.classes_attended);
+  const held = Number(data.classes_held);
+  if (isNaN(attended) || attended < 0 || !Number.isInteger(attended)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Must be integer >= 0', path: ['classes_attended'] });
+  }
+  if (isNaN(held) || held < 0 || !Number.isInteger(held)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Must be integer >= 0', path: ['classes_held'] });
+  }
+  if (!isNaN(attended) && !isNaN(held) && attended > held) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Attended cannot exceed held', path: ['classes_attended'] });
+  }
+});
+
+type AttendanceForm = z.infer<typeof attendanceSchema>;
+
 export default function SubjectDetail() {
   const { semesterId, subjectId } = useParams<{ semesterId: string, subjectId: string }>();
   const queryClient = useQueryClient();
-  const [isCreating, setIsCreating] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isCreatingAssessment, setIsCreatingAssessment] = useState(false);
+  const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
+  
+  const [isCreatingAttendance, setIsCreatingAttendance] = useState(false);
+  const [editingAttendanceId, setEditingAttendanceId] = useState<string | null>(null);
+
   const [error, setError] = useState('');
 
   const { data: semester } = useQuery<Semester>({
@@ -64,48 +88,115 @@ export default function SubjectDetail() {
     queryFn: () => api.get(`/subjects/${subjectId}/assessments`),
   });
 
-  const invalidateData = () => {
+  const { data: attendanceList, isLoading: isLoadingAttendance } = useQuery<Attendance[]>({
+    queryKey: ['subjects', subjectId, 'attendance'],
+    queryFn: () => api.get(`/subjects/${subjectId}/attendance`),
+  });
+
+  const invalidateAssessments = () => {
     queryClient.invalidateQueries({ queryKey: ['subjects', subjectId, 'assessments'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
 
-  const createMutation = useMutation({
+  const invalidateAttendance = () => {
+    queryClient.invalidateQueries({ queryKey: ['subjects', subjectId, 'attendance'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+
+  // Assessment Mutations
+  const createAssessmentMutation = useMutation({
     mutationFn: (data: any) => api.post(`/subjects/${subjectId}/assessments`, data),
     onSuccess: () => {
-      invalidateData();
-      setIsCreating(false);
-      reset();
+      invalidateAssessments();
+      setIsCreatingAssessment(false);
+      resetAssessment();
     },
     onError: (err: any) => setError(err.message || 'Failed to create assessment'),
   });
 
-  const updateMutation = useMutation({
+  const updateAssessmentMutation = useMutation({
     mutationFn: ({ id, data }: { id: string, data: any }) => api.put(`/assessments/${id}`, data),
     onSuccess: () => {
-      invalidateData();
-      setEditingId(null);
+      invalidateAssessments();
+      setEditingAssessmentId(null);
     },
     onError: (err: any) => setError(err.message || 'Failed to update assessment'),
   });
 
-  const deleteMutation = useMutation({
+  const deleteAssessmentMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/assessments/${id}`),
-    onSuccess: () => invalidateData(),
+    onSuccess: () => invalidateAssessments(),
     onError: (err: any) => setError(err.message || 'Failed to delete assessment'),
   });
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    setValue,
-    formState: { errors },
-  } = useForm<AssessmentForm>({
-    resolver: zodResolver(assessmentSchema),
-    defaultValues: { status: 'pending' }
+  // Attendance Mutations
+  const createAttendanceMutation = useMutation({
+    mutationFn: (data: any) => api.post(`/subjects/${subjectId}/attendance`, data),
+    onSuccess: () => {
+      invalidateAttendance();
+      setIsCreatingAttendance(false);
+      resetAttendance();
+    },
+    onError: (err: any) => setError(err.message || 'Failed to create attendance'),
   });
 
-  const parsePayload = (data: AssessmentForm) => {
+  const updateAttendanceMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string, data: any }) => api.put(`/attendance/${id}`, data),
+    onSuccess: () => {
+      invalidateAttendance();
+      setEditingAttendanceId(null);
+    },
+    onError: (err: any) => setError(err.message || 'Failed to update attendance'),
+  });
+
+  const deleteAttendanceMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/attendance/${id}`),
+    onSuccess: () => invalidateAttendance(),
+    onError: (err: any) => setError(err.message || 'Failed to delete attendance'),
+  });
+
+  const editingAssessment = assessments?.find(a => a.id === editingAssessmentId);
+  const {
+    register: registerAssessment,
+    handleSubmit: handleSubmitAssessment,
+    reset: resetAssessment,
+    formState: { errors: assessmentErrors },
+  } = useForm<AssessmentForm>({
+    resolver: zodResolver(assessmentSchema),
+    defaultValues: { status: 'pending' },
+    values: editingAssessment ? {
+      name: editingAssessment.name,
+      category: editingAssessment.category,
+      max_marks: editingAssessment.max_marks.toString(),
+      status: editingAssessment.status as any,
+      marks: editingAssessment.marks !== null ? editingAssessment.marks.toString() : '',
+      weightage: editingAssessment.weightage !== null ? editingAssessment.weightage.toString() : '',
+      scheduled_at: editingAssessment.scheduled_at ? editingAssessment.scheduled_at.split('T')[0] : '',
+    } : undefined,
+  });
+
+  const getLocalDateString = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const editingAttendance = attendanceList?.find(a => a.id === editingAttendanceId);
+  const {
+    register: registerAttendance,
+    handleSubmit: handleSubmitAttendance,
+    reset: resetAttendance,
+    formState: { errors: attendanceErrors },
+  } = useForm<AttendanceForm>({
+    resolver: zodResolver(attendanceSchema),
+    defaultValues: { recorded_on: getLocalDateString() },
+    values: editingAttendance ? {
+      classes_attended: editingAttendance.classes_attended.toString(),
+      classes_held: editingAttendance.classes_held.toString(),
+      recorded_on: editingAttendance.recorded_on,
+    } : undefined,
+  });
+
+  const parseAssessmentPayload = (data: AssessmentForm) => {
     return {
       name: data.name,
       category: data.category,
@@ -117,43 +208,73 @@ export default function SubjectDetail() {
     };
   };
 
-  const onSubmitCreate = (data: AssessmentForm) => {
-    setError('');
-    createMutation.mutate(parsePayload(data));
+  const parseAttendancePayload = (data: AttendanceForm) => {
+    return {
+      classes_attended: Number(data.classes_attended),
+      classes_held: Number(data.classes_held),
+      recorded_on: data.recorded_on,
+    };
   };
 
-  const onSubmitUpdate = (data: AssessmentForm) => {
-    if (!editingId) return;
+  const onSubmitCreateAssessment = (data: AssessmentForm) => {
     setError('');
-    updateMutation.mutate({ id: editingId, data: parsePayload(data) });
+    createAssessmentMutation.mutate(parseAssessmentPayload(data));
   };
 
-  const startEditing = (assessment: Assessment) => {
+  const onSubmitUpdateAssessment = (data: AssessmentForm) => {
+    if (!editingAssessmentId) return;
     setError('');
-    setIsCreating(false);
-    setEditingId(assessment.id);
-    setValue('name', assessment.name);
-    setValue('category', assessment.category);
-    setValue('max_marks', assessment.max_marks.toString());
-    setValue('status', assessment.status);
-    setValue('marks', assessment.marks !== null ? assessment.marks.toString() : '');
-    setValue('weightage', assessment.weightage !== null ? assessment.weightage.toString() : '');
-    setValue('scheduled_at', assessment.scheduled_at ? assessment.scheduled_at.split('T')[0] : '');
+    updateAssessmentMutation.mutate({ id: editingAssessmentId, data: parseAssessmentPayload(data) });
   };
 
-  const cancelEditing = () => {
-    setEditingId(null);
-    reset();
+  const onSubmitCreateAttendance = (data: AttendanceForm) => {
+    setError('');
+    createAttendanceMutation.mutate(parseAttendancePayload(data));
+  };
+
+  const onSubmitUpdateAttendance = (data: AttendanceForm) => {
+    if (!editingAttendanceId) return;
+    setError('');
+    updateAttendanceMutation.mutate({ id: editingAttendanceId, data: parseAttendancePayload(data) });
+  };
+
+  const startEditingAssessment = (assessment: Assessment) => {
+    setError('');
+    setIsCreatingAssessment(false);
+    setEditingAssessmentId(assessment.id);
+  };
+
+  const startEditingAttendance = (att: Attendance) => {
+    setError('');
+    setIsCreatingAttendance(false);
+    setEditingAttendanceId(att.id);
+  };
+
+  const cancelEditingAssessment = () => {
+    setEditingAssessmentId(null);
+    resetAssessment();
     setError('');
   };
 
-  const handleDelete = (id: string) => {
+  const cancelEditingAttendance = () => {
+    setEditingAttendanceId(null);
+    resetAttendance();
+    setError('');
+  };
+
+  const handleDeleteAssessment = (id: string) => {
     if (window.confirm('Are you sure you want to delete this assessment? All associated marks will be removed.')) {
-      deleteMutation.mutate(id);
+      deleteAssessmentMutation.mutate(id);
     }
   };
 
-  if (isLoadingSubject || isLoadingAssessments) return <div>Loading...</div>;
+  const handleDeleteAttendance = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this attendance record?')) {
+      deleteAttendanceMutation.mutate(id);
+    }
+  };
+
+  if (isLoadingSubject || isLoadingAssessments || isLoadingAttendance) return <div>Loading...</div>;
   if (!subject) return <div>Subject not found</div>;
 
   const getStatusBadge = (status: string) => {
@@ -175,47 +296,47 @@ export default function SubjectDetail() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="name">Assessment Name *</Label>
-          <Input id="name" placeholder="e.g. Midterm" {...register('name')} />
-          {errors.name && <p className="text-sm text-red-600">{errors.name.message}</p>}
+          <Input id="name" placeholder="e.g. Midterm" {...registerAssessment('name')} />
+          {assessmentErrors.name && <p className="text-sm text-red-600">{assessmentErrors.name.message}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="category">Category *</Label>
-          <Input id="category" placeholder="e.g. Exam" {...register('category')} />
-          {errors.category && <p className="text-sm text-red-600">{errors.category.message}</p>}
+          <Input id="category" placeholder="e.g. Exam" {...registerAssessment('category')} />
+          {assessmentErrors.category && <p className="text-sm text-red-600">{assessmentErrors.category.message}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="max_marks">Max Marks *</Label>
-          <Input id="max_marks" type="number" step="0.1" {...register('max_marks')} />
-          {errors.max_marks && <p className="text-sm text-red-600">{errors.max_marks.message}</p>}
+          <Input id="max_marks" type="number" step="0.1" {...registerAssessment('max_marks')} />
+          {assessmentErrors.max_marks && <p className="text-sm text-red-600">{assessmentErrors.max_marks.message}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="weightage">Weightage (%)</Label>
-          <Input id="weightage" type="number" step="0.1" {...register('weightage')} />
-          {errors.weightage && <p className="text-sm text-red-600">{errors.weightage.message}</p>}
+          <Input id="weightage" type="number" step="0.1" {...registerAssessment('weightage')} />
+          {assessmentErrors.weightage && <p className="text-sm text-red-600">{assessmentErrors.weightage.message}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="scheduled_at">Date</Label>
-          <Input id="scheduled_at" type="date" {...register('scheduled_at')} />
-          {errors.scheduled_at && <p className="text-sm text-red-600">{errors.scheduled_at.message}</p>}
+          <Input id="scheduled_at" type="date" {...registerAssessment('scheduled_at')} />
+          {assessmentErrors.scheduled_at && <p className="text-sm text-red-600">{assessmentErrors.scheduled_at.message}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="status">Status</Label>
           <select
             id="status"
             className="flex h-10 w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            {...register('status')}
+            {...registerAssessment('status')}
           >
             <option value="pending">Pending</option>
             <option value="scored">Scored</option>
             <option value="absent">Absent</option>
             <option value="exempt">Exempt</option>
           </select>
-          {errors.status && <p className="text-sm text-red-600">{errors.status.message}</p>}
+          {assessmentErrors.status && <p className="text-sm text-red-600">{assessmentErrors.status.message}</p>}
         </div>
         <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="marks">Marks</Label>
-          <Input id="marks" type="number" step="0.1" placeholder="Leave blank if not graded" {...register('marks')} />
-          {errors.marks && <p className="text-sm text-red-600">{errors.marks.message}</p>}
+          <Input id="marks" type="number" step="0.1" placeholder="Leave blank if not graded" {...registerAssessment('marks')} />
+          {assessmentErrors.marks && <p className="text-sm text-red-600">{assessmentErrors.marks.message}</p>}
         </div>
       </div>
       <div className="flex gap-2 justify-end mt-4">
@@ -223,38 +344,66 @@ export default function SubjectDetail() {
           type="button"
           variant="outline"
           onClick={() => {
-            if (isEdit) cancelEditing();
-            else { setIsCreating(false); reset(); setError(''); }
+            if (isEdit) cancelEditingAssessment();
+            else { setIsCreatingAssessment(false); resetAssessment(); setError(''); }
           }}
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={isEdit ? updateMutation.isPending : createMutation.isPending}>
+        <Button type="submit" disabled={isEdit ? updateAssessmentMutation.isPending : createAssessmentMutation.isPending}>
           {isEdit ? 'Save Changes' : 'Create Assessment'}
         </Button>
       </div>
     </div>
   );
 
+  const AttendanceFormContent = ({ isEdit = false }) => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="classes_attended">Attended *</Label>
+          <Input id="classes_attended" type="number" step="1" {...registerAttendance('classes_attended')} />
+          {attendanceErrors.classes_attended && <p className="text-sm text-red-600">{attendanceErrors.classes_attended.message}</p>}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="classes_held">Held *</Label>
+          <Input id="classes_held" type="number" step="1" {...registerAttendance('classes_held')} />
+          {attendanceErrors.classes_held && <p className="text-sm text-red-600">{attendanceErrors.classes_held.message}</p>}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="recorded_on">Date *</Label>
+          <Input id="recorded_on" type="date" {...registerAttendance('recorded_on')} />
+          {attendanceErrors.recorded_on && <p className="text-sm text-red-600">{attendanceErrors.recorded_on.message}</p>}
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end mt-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            if (isEdit) cancelEditingAttendance();
+            else { setIsCreatingAttendance(false); resetAttendance(); setError(''); }
+          }}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isEdit ? updateAttendanceMutation.isPending : createAttendanceMutation.isPending}>
+          {isEdit ? 'Save Changes' : 'Record Attendance'}
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center gap-4">
         <Link to={`/app/semesters/${semesterId}`} className="text-gray-500 hover:text-gray-900">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{subject.name} {subject.code ? `(${subject.code})` : ''}</h1>
-          <p className="text-sm text-gray-500">{semester?.name} • Assessments</p>
+          <p className="text-sm text-gray-500">{semester?.name} • Subject Details</p>
         </div>
-      </div>
-
-      <div className="flex items-center justify-between border-t border-gray-200 pt-6">
-        <h2 className="text-xl font-semibold text-gray-900">Assessments</h2>
-        {!editingId && (
-          <Button onClick={() => { setIsCreating(true); reset(); setError(''); }}>
-            Add Assessment
-          </Button>
-        )}
       </div>
 
       {error && (
@@ -263,66 +412,146 @@ export default function SubjectDetail() {
         </div>
       )}
 
-      {isCreating && (
-        <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200">
-          <form onSubmit={handleSubmit(onSubmitCreate)}>
-            <h3 className="text-lg font-medium mb-4">Create New Assessment</h3>
-            <AssessmentFormContent />
-          </form>
+      {/* ATTENDANCE SECTION */}
+      <section>
+        <div className="flex items-center justify-between border-t border-gray-200 pt-6 mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Attendance</h2>
+          {!editingAttendanceId && (
+            <Button onClick={() => { setIsCreatingAttendance(true); resetAttendance(); setError(''); }}>
+              Record Attendance
+            </Button>
+          )}
         </div>
-      )}
 
-      {!assessments?.length && !isCreating ? (
-        <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
-          <h3 className="text-sm font-medium text-gray-900">No assessments</h3>
-          <p className="mt-1 text-sm text-gray-500">Add an assessment to track your progress.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {assessments?.map((assessment) => (
-            <div key={assessment.id} className="p-6 bg-white rounded-lg shadow-sm border border-gray-200">
-              {editingId === assessment.id ? (
-                <form onSubmit={handleSubmit(onSubmitUpdate)}>
-                  <h3 className="text-lg font-medium mb-4">Edit Assessment</h3>
-                  <AssessmentFormContent isEdit={true} />
-                </form>
-              ) : (
-                <div>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-semibold text-gray-900">{assessment.name}</h3>
-                        {getStatusBadge(assessment.status)}
+        {isCreatingAttendance && (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
+            <form onSubmit={handleSubmitAttendance(onSubmitCreateAttendance)}>
+              <h3 className="text-lg font-medium mb-4">Record Attendance</h3>
+              {AttendanceFormContent({ isEdit: false })}
+            </form>
+          </div>
+        )}
+
+        {!attendanceList?.length && !isCreatingAttendance ? (
+          <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
+            <h3 className="text-sm font-medium text-gray-900">No attendance recorded</h3>
+            <p className="mt-1 text-sm text-gray-500">Record attendance to track your classes.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {attendanceList?.map((att) => {
+              let percentage = 0;
+              if (att.classes_held > 0) {
+                percentage = (att.classes_attended / att.classes_held) * 100;
+              }
+              return (
+                <div key={att.id} className="p-6 bg-white rounded-lg shadow-sm border border-gray-200">
+                  {editingAttendanceId === att.id ? (
+                    <form onSubmit={handleSubmitAttendance(onSubmitUpdateAttendance)}>
+                      <h3 className="text-lg font-medium mb-4">Edit Attendance</h3>
+                      {AttendanceFormContent({ isEdit: true })}
+                    </form>
+                  ) : (
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <p data-testid="attendance-pct" className="text-2xl font-bold text-gray-900">
+                            {att.classes_held === 0 ? 'N/A' : `${percentage.toFixed(1)}%`}
+                          </p>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                          <span data-testid="attendance-fraction">{att.classes_attended} / {att.classes_held}</span> classes • Recorded on {att.recorded_on}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {assessment.category}
-                        {assessment.weightage != null && ` • ${assessment.weightage}% weight`}
-                        {assessment.scheduled_at && ` • ${new Date(assessment.scheduled_at).toLocaleDateString()}`}
-                      </p>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => startEditingAttendance(att)} aria-label="Edit attendance">
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteAttendance(att.id)} className="text-red-600 hover:text-red-700" aria-label="Delete attendance">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => startEditing(assessment)}>
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(assessment.id)} className="text-red-600 hover:text-red-700">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-gray-100 flex items-end gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Marks</p>
-                      <p data-testid="assessment-marks" className="text-2xl font-bold text-gray-900">
-                        {assessment.marks !== null ? assessment.marks : '--'} <span className="text-lg text-gray-400 font-normal">/ {assessment.max_marks}</span>
-                      </p>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ASSESSMENTS SECTION */}
+      <section>
+        <div className="flex items-center justify-between border-t border-gray-200 pt-6 mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Assessments</h2>
+          {!editingAssessmentId && (
+            <Button onClick={() => { setIsCreatingAssessment(true); resetAssessment(); setError(''); }}>
+              Add Assessment
+            </Button>
+          )}
         </div>
-      )}
+
+        {isCreatingAssessment && (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
+            <form onSubmit={handleSubmitAssessment(onSubmitCreateAssessment)}>
+              <h3 className="text-lg font-medium mb-4">Create New Assessment</h3>
+              {AssessmentFormContent({ isEdit: false })}
+            </form>
+          </div>
+        )}
+
+        {!assessments?.length && !isCreatingAssessment ? (
+          <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
+            <h3 className="text-sm font-medium text-gray-900">No assessments</h3>
+            <p className="mt-1 text-sm text-gray-500">Add an assessment to track your progress.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {assessments?.map((assessment) => (
+              <div key={assessment.id} className="p-6 bg-white rounded-lg shadow-sm border border-gray-200">
+                {editingAssessmentId === assessment.id ? (
+                  <form onSubmit={handleSubmitAssessment(onSubmitUpdateAssessment)}>
+                    <h3 className="text-lg font-medium mb-4">Edit Assessment</h3>
+                    {AssessmentFormContent({ isEdit: true })}
+                  </form>
+                ) : (
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold text-gray-900">{assessment.name}</h3>
+                          {getStatusBadge(assessment.status)}
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {assessment.category}
+                          {assessment.weightage != null && ` • ${assessment.weightage}% weight`}
+                          {assessment.scheduled_at && ` • ${new Date(assessment.scheduled_at).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => startEditingAssessment(assessment)} aria-label="Edit assessment">
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteAssessment(assessment.id)} className="text-red-600 hover:text-red-700" aria-label="Delete assessment">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-end gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Marks</p>
+                        <p data-testid="assessment-marks" className="text-2xl font-bold text-gray-900">
+                          {assessment.marks !== null ? assessment.marks : '--'} <span className="text-lg text-gray-400 font-normal">/ {assessment.max_marks}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
