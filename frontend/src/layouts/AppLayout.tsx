@@ -24,6 +24,9 @@ export default function AppLayout() {
               <Link to="/app/dashboard" className="text-sm font-medium text-gray-700 hover:text-primary">
                 Dashboard
               </Link>
+              <Link to="/app/semesters" className="text-sm font-medium text-gray-700 hover:text-primary">
+                Semesters
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4">

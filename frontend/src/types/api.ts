@@ -24,3 +24,22 @@ export interface SubjectSummary {
   completed_work_percentage: string | number | null;
   attendance_percentage: string | number | null;
 }
+
+export interface Semester {
+  id: string;
+  name: string;
+  academic_year: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code: string | null;
+  credits: number | null;
+  semester_id: string;
+  created_at: string;
+  updated_at: string | null;
+}

@@ -5,6 +5,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import AppLayout from './layouts/AppLayout';
 import Dashboard from './pages/Dashboard';
+import Semesters from './pages/Semesters';
+import SemesterDetail from './pages/SemesterDetail';
 
 const queryClient = new QueryClient();
 
@@ -63,6 +65,8 @@ export default function App() {
             }>
               <Route path="" element={<Navigate to="/app/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
+              <Route path="semesters" element={<Semesters />} />
+              <Route path="semesters/:semesterId" element={<SemesterDetail />} />
             </Route>
             
             <Route path="*" element={<Navigate to="/login" replace />} />
