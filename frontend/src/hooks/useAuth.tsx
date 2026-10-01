@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { api } from '@/api/client';
 import type { User } from '@/types/api';
 import { useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthContextType {
   user: User | null;
@@ -17,6 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -36,12 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const handleUnauthorized = () => {
       setUser(null);
+      queryClient.clear();
       navigate('/login');
     };
 
     window.addEventListener('auth-unauthorized', handleUnauthorized);
     return () => window.removeEventListener('auth-unauthorized', handleUnauthorized);
-  }, [navigate]);
+  }, [navigate, queryClient]);
 
   const login = async (token: string) => {
     localStorage.setItem('token', token);
@@ -52,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
+    queryClient.clear();
     navigate('/login');
   };
 
