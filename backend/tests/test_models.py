@@ -186,3 +186,19 @@ def test_nullable_assessment_marks(db_session):
 
     assert assessment_none.marks is None
     assert assessment_zero.marks == 0
+
+def test_scored_assessment_null_marks(db_session):
+    user = User(email="test10@example.com", password_hash="hash", name="Test")
+    db_session.add(user)
+    db_session.flush()
+    semester = Semester(user_id=user.id, name="Fall", academic_year="2026")
+    db_session.add(semester)
+    db_session.flush()
+    subject = Subject(semester_id=semester.id, name="Math")
+    db_session.add(subject)
+    db_session.flush()
+
+    assessment = Assessment(subject_id=subject.id, name="Midterm", category="midsem", max_marks=100, status="scored", marks=None)
+    db_session.add(assessment)
+    with pytest.raises(IntegrityError):
+        db_session.flush()

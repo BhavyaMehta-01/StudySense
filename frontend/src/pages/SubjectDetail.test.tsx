@@ -327,6 +327,27 @@ describe('SubjectDetail - Assessments', () => {
     });
   });
 
+  test('validates scored assessment must have marks', async () => {
+    render(<SubjectDetail />, { wrapper: Wrapper });
+
+    await waitFor(() => expect(screen.getByText('No assessments')).not.toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: /add assessment/i }));
+
+    fireEvent.change(screen.getByLabelText(/assessment name \*/i), { target: { value: 'Assignment 1' } });
+    fireEvent.change(screen.getByLabelText(/category \*/i), { target: { value: 'Homework' } });
+    fireEvent.change(screen.getByLabelText(/max marks \*/i), { target: { value: '50' } });
+
+    // Set status to scored but leave marks blank
+    fireEvent.change(screen.getByLabelText(/^status/i), { target: { value: 'scored' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /create assessment/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/marks are required when status is 'scored'/i)).not.toBeNull();
+    });
+  });
+
   test('updates assessment successfully', async () => {
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/semesters/1') return Promise.resolve({ id: '1', name: 'Fall 2026' });

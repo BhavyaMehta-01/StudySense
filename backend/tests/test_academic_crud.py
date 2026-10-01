@@ -128,6 +128,23 @@ def test_subject_assessment_attendance_crud(db_session):
     )
     assert bad_ass_resp.status_code == 400
 
+    # scored assessment without marks should be rejected (422 from Pydantic)
+    scored_no_marks_resp = client.post(
+        f"/subjects/{sub_id}/assessments",
+        json={"name": "Bad Scored", "category": "midsem", "max_marks": 100, "status": "scored", "marks": None},
+        headers=headers
+    )
+    assert scored_no_marks_resp.status_code == 422
+    assert "Marks are required when status is 'scored'" in str(scored_no_marks_resp.json())
+
+    # pending assessment without marks should be accepted
+    pending_no_marks_resp = client.post(
+        f"/subjects/{sub_id}/assessments",
+        json={"name": "Good Pending", "category": "midsem", "max_marks": 100, "status": "pending", "marks": None},
+        headers=headers
+    )
+    assert pending_no_marks_resp.status_code == 200
+
     
 def test_idor_protection_and_invalid_ids(db_session):
     token_a, user_a = get_token_for_user(db_session, "a@example.com", "A")

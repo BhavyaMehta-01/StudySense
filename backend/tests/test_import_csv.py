@@ -57,6 +57,7 @@ def test_import_academic_validation_errors(db_session):
 Sem 1,Math,Midterm,invalid_cat,scored,100,80,40
 Sem 1,Math,Final,endsem,pending,100,,101
 Sem 1,Math,Test1,quiz,scored,100,105,10
+Sem 1,Math,Test2,quiz,scored,100,,10
 """
     file = {"file": ("data.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")}
     resp = client.post(
@@ -68,15 +69,17 @@ Sem 1,Math,Test1,quiz,scored,100,105,10
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is False
-    assert len(data["errors"]) == 3
+    assert len(data["errors"]) == 4
     
     # 101 weightage -> over 100
     # 105 marks -> marks > max_marks
     # invalid_cat
+    # scored missing marks
     errors = [e["message"] for e in data["errors"]]
     assert any("Invalid category" in e for e in errors)
     assert any("Invalid weightage" in e for e in errors)
     assert any("Invalid marks" in e for e in errors)
+    assert any("Marks are required when status is 'scored'" in e for e in errors)
 
 def test_import_attendance(db_session):
     token, user_id = get_token_for_user(db_session, "import3@example.com", "Import 3")

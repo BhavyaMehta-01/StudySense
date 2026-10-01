@@ -38,6 +38,10 @@ const assessmentSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Weightage must be between 0 and 100', path: ['weightage'] });
     }
   }
+
+  if (data.status === 'scored' && (!data.marks || data.marks.trim() === '')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Marks are required when status is 'scored'", path: ['marks'] });
+  }
 });
 
 type AssessmentForm = z.infer<typeof assessmentSchema>;

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 from uuid import UUID
 
 class UserRegister(BaseModel):
@@ -65,6 +65,7 @@ class SubjectResponse(SubjectBase):
     updated_at: Optional[datetime]
     class Config: from_attributes = True
 
+
 class AssessmentBase(BaseModel):
     name: str
     category: str
@@ -73,6 +74,12 @@ class AssessmentBase(BaseModel):
     weightage: Optional[Decimal] = None
     scheduled_at: Optional[datetime] = None
     status: Optional[str] = "pending"
+
+    @model_validator(mode='after')
+    def check_scored_marks(self):
+        if self.status == 'scored' and self.marks is None:
+            raise ValueError("Marks are required when status is 'scored'")
+        return self
 
 class AssessmentCreate(AssessmentBase):
     pass
@@ -85,6 +92,12 @@ class AssessmentUpdate(BaseModel):
     weightage: Optional[Decimal] = None
     scheduled_at: Optional[datetime] = None
     status: Optional[str] = None
+
+    @model_validator(mode='after')
+    def check_scored_marks(self):
+        if self.status == 'scored' and 'marks' in self.model_fields_set and self.marks is None:
+            raise ValueError("Marks are required when status is 'scored'")
+        return self
 
 class AssessmentResponse(AssessmentBase):
     id: UUID

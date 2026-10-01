@@ -50,27 +50,27 @@ def import_csv(
 ):
     if import_type not in ["academic", "attendance"]:
         raise HTTPException(status_code=400, detail="Invalid import_type. Must be 'academic' or 'attendance'.")
-        
+
     content = file.file.read().decode("utf-8")
     reader = csv.DictReader(io.StringIO(content))
-    
+
     errors = []
     processed = 0
     imported = 0
-    
+
     # We will use a savepoint to ensure we can roll back cleanly if dry_run=True or errors occur
     # Actually, SQLAlchemy 2.0 with Session can just rollback at the end if we don't commit.
     # We will only commit if not dry_run and no errors.
-    
+
     # Cache to prevent N+1 queries during import
     semesters_cache = {}
     subjects_cache = {}
-    
+
     def get_sem(name: str):
         if name not in semesters_cache:
             semesters_cache[name] = get_or_create_semester(db, current_user.id, name)
         return semesters_cache[name]
-        
+
     def get_sub(sem_id: str, name: str):
         key = f"{sem_id}_{name}"
         if key not in subjects_cache:
@@ -83,26 +83,26 @@ def import_csv(
 
     for row_num, row in enumerate(reader, start=2):
         processed += 1
-        
+
         sem_name = row.get("semester")
         sub_name = row.get("subject")
-        
+
         if not sem_name or not sub_name:
             errors.append(ImportError(row=row_num, column="semester/subject", message="Semester and subject are required"))
             continue
-            
+
         sem = get_sem(sem_name)
         sub = get_sub(sem.id, sub_name)
-        
+
         if import_type == "academic":
             ass_name = row.get("assessment")
             category = row.get("category")
             max_marks_str = row.get("max_marks")
-            
+
             if not ass_name or not category or not max_marks_str:
                 errors.append(ImportError(row=row_num, column="assessment/category/max_marks", message="Assessment, category, and max_marks are required"))
                 continue
-                
+
             try:
                 max_marks = Decimal(max_marks_str)
                 if max_marks <= 0:
@@ -110,7 +110,7 @@ def import_csv(
             except:
                 errors.append(ImportError(row=row_num, column="max_marks", message="Invalid max_marks (must be > 0)"))
                 continue
-                
+
             marks = None
             if row.get("marks"):
                 try:
@@ -120,7 +120,7 @@ def import_csv(
                 except:
                     errors.append(ImportError(row=row_num, column="marks", message="Invalid marks (must be between 0 and max_marks)"))
                     continue
-                    
+
             weightage = None
             if row.get("weightage"):
                 try:
@@ -130,17 +130,17 @@ def import_csv(
                 except:
                     errors.append(ImportError(row=row_num, column="weightage", message="Invalid weightage (must be > 0 and <= 100)"))
                     continue
-                    
+
             if weightage:
                 if sub.id not in subject_weights:
                     current_w = db.query(func.sum(models.Assessment.weightage)).filter_by(subject_id=sub.id).scalar() or Decimal('0.0')
                     subject_weights[sub.id] = current_w
-                
+
                 if subject_weights[sub.id] + weightage > Decimal('100.0'):
                     errors.append(ImportError(row=row_num, column="weightage", message="Total subject weightage would exceed 100%"))
                     continue
                 subject_weights[sub.id] += weightage
-                
+
             scheduled_date = None
             if row.get("scheduled_date"):
                 try:
@@ -149,24 +149,28 @@ def import_csv(
                 except:
                     errors.append(ImportError(row=row_num, column="scheduled_date", message="Invalid date format (use YYYY-MM-DD)"))
                     continue
-                    
+
             status = row.get("status") or "pending"
             valid_categories = ['internal_test', 'assignment', 'quiz', 'practical', 'viva', 'project', 'midsem', 'endsem', 'other']
             valid_statuses = ['pending', 'scored', 'absent', 'exempt']
-            
+
             if category not in valid_categories:
                 errors.append(ImportError(row=row_num, column="category", message=f"Invalid category. Must be one of {valid_categories}"))
                 continue
             if status not in valid_statuses:
                 errors.append(ImportError(row=row_num, column="status", message=f"Invalid status. Must be one of {valid_statuses}"))
                 continue
-                
+
+            if status == "scored" and marks is None:
+                errors.append(ImportError(row=row_num, column="marks", message="Marks are required when status is 'scored'"))
+                continue
+
             # Check for duplicate assessment in this subject
             existing = db.query(models.Assessment).filter_by(subject_id=sub.id, name=ass_name).first()
             if existing:
                 errors.append(ImportError(row=row_num, column="assessment", message="Assessment already exists"))
                 continue
-                
+
             ass = models.Assessment(
                 subject_id=sub.id,
                 name=ass_name,
@@ -179,7 +183,7 @@ def import_csv(
             )
             db.add(ass)
             imported += 1
-            
+
         elif import_type == "attendance":
             try:
                 att = int(row.get("classes_attended", 0))
@@ -189,7 +193,7 @@ def import_csv(
             except:
                 errors.append(ImportError(row=row_num, column="classes", message="Invalid attendance values (attended >= 0, held > 0, attended <= held)"))
                 continue
-                
+
             rec_on = None
             if row.get("recorded_on"):
                 try:
@@ -200,7 +204,7 @@ def import_csv(
             else:
                 errors.append(ImportError(row=row_num, column="recorded_on", message="recorded_on is required"))
                 continue
-                
+
             attendance = models.Attendance(
                 subject_id=sub.id,
                 classes_attended=att,
@@ -209,7 +213,7 @@ def import_csv(
             )
             db.add(attendance)
             imported += 1
-            
+
     # Commit or Rollback
     if dry_run or len(errors) > 0:
         db.rollback()
@@ -222,7 +226,7 @@ def import_csv(
             db.rollback()
             errors.append(ImportError(row=0, column="database", message="Database integrity error during commit"))
             success = False
-            
+
     return ImportResponse(
         success=success,
         total_processed=processed,

@@ -67,6 +67,10 @@ class Assessment(Base):
             "status IN ('pending', 'scored', 'absent', 'exempt')",
             name="chk_assessments_status"
         ),
+        CheckConstraint(
+            "status != 'scored' OR marks IS NOT NULL",
+            name="chk_assessments_scored_marks"
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
