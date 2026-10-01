@@ -16,6 +16,8 @@ export interface DashboardSummary {
 }
 
 export interface SubjectSummary {
+  semester_id: string;
+  semester_name: string;
   subject_id: string;
   subject_name: string;
   earned_points: string | number;

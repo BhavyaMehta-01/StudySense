@@ -10,6 +10,8 @@ from ..dependencies import get_db, get_current_user
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 class SubjectSummary(BaseModel):
+    semester_id: str
+    semester_name: str
     subject_id: str
     subject_name: str
     earned_points: Decimal
@@ -66,6 +68,8 @@ def get_dashboard(
             attendance_percentage = (Decimal(classes_attended) / Decimal(classes_held)) * Decimal('100.0')
             
         subject_summaries.append(SubjectSummary(
+            semester_id=str(subject.semester_id),
+            semester_name=subject.semester.name,
             subject_id=str(subject.id),
             subject_name=subject.name,
             earned_points=round(earned_points, 2),

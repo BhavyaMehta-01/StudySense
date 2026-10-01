@@ -43,6 +43,8 @@ def test_dashboard_populated(db_session):
     assert data["total_subjects"] == 1
     
     summary = data["subject_summaries"][0]
+    assert summary["semester_id"] == sem["id"]
+    assert summary["semester_name"] == "S1"
     assert summary["subject_name"] == "Sub1"
     assert summary["earned_points"] == "32.00"  # 80/100 * 40
     assert summary["completed_weight"] == "40.00"
