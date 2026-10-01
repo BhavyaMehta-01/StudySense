@@ -112,3 +112,15 @@ class AttendanceResponse(AttendanceBase):
     created_at: datetime
     updated_at: Optional[datetime]
     class Config: from_attributes = True
+
+class CalculatorRequest(BaseModel):
+    target_percentage: Decimal
+
+class CalculatorResponse(BaseModel):
+    earned_points: Decimal
+    remaining_weight: Decimal
+    total_valid_weight: Decimal
+    target_achieved: bool
+    impossible: bool
+    required_remaining_percentage: Decimal
+    required_points_from_remaining: Decimal

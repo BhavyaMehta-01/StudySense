@@ -33,7 +33,7 @@ describe('SubjectDetail - Attendance', () => {
     vi.clearAllMocks();
     queryClient.clear();
     window.history.pushState({}, 'Test', '/app/semesters/1/subjects/2');
-    
+
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/semesters/1') return Promise.resolve({ id: '1', name: 'Fall 2026' });
       if (url === '/subjects/2') return Promise.resolve({ id: '2', name: 'Math 101', code: 'M101' });
@@ -64,11 +64,11 @@ describe('SubjectDetail - Attendance', () => {
     });
 
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => {
       const pcts = screen.getAllByTestId('attendance-pct');
       const fractions = screen.getAllByTestId('attendance-fraction');
-      
+
       // 10/10 -> 100%
       expect(pcts[0].textContent).toContain('100.0%');
       expect(fractions[0].textContent).toContain('10 / 10');
@@ -85,26 +85,26 @@ describe('SubjectDetail - Attendance', () => {
 
   test('validates attendance creation form', async () => {
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => expect(screen.getByText('No attendance recorded')).not.toBeNull());
-    
+
     fireEvent.click(screen.getAllByRole('button', { name: /record attendance/i })[0]);
-    
+
     // Clear the default date field
     fireEvent.change(screen.getByLabelText(/date \*/i), { target: { value: '' } });
     fireEvent.click(screen.getAllByRole('button', { name: /record attendance/i })[1]);
-    
+
     await waitFor(() => {
       expect(screen.getByText(/classes attended is required/i)).not.toBeNull();
       expect(screen.getByText(/classes held is required/i)).not.toBeNull();
       expect(screen.getByText(/date is required/i)).not.toBeNull();
     });
-    
+
     // Test custom validation (negative, > held)
     fireEvent.change(screen.getByLabelText(/attended \*/i), { target: { value: '-1' } });
     fireEvent.change(screen.getByLabelText(/held \*/i), { target: { value: '5' } });
     fireEvent.click(screen.getAllByRole('button', { name: /record attendance/i })[1]);
-    
+
     await waitFor(() => {
       expect(screen.getByText(/must be integer >= 0/i)).not.toBeNull();
     });
@@ -112,7 +112,7 @@ describe('SubjectDetail - Attendance', () => {
     fireEvent.change(screen.getByLabelText(/attended \*/i), { target: { value: '6' } });
     fireEvent.change(screen.getByLabelText(/held \*/i), { target: { value: '5' } });
     fireEvent.click(screen.getAllByRole('button', { name: /record attendance/i })[1]);
-    
+
     await waitFor(() => {
       expect(screen.getByText(/attended cannot exceed held/i)).not.toBeNull();
     });
@@ -120,19 +120,19 @@ describe('SubjectDetail - Attendance', () => {
 
   test('creates attendance successfully', async () => {
     (api.post as any).mockResolvedValueOnce({ id: 'att-new' });
-    
+
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => expect(screen.getByText('No attendance recorded')).not.toBeNull());
-    
+
     fireEvent.click(screen.getAllByRole('button', { name: /record attendance/i })[0]);
-    
+
     fireEvent.change(screen.getByLabelText(/attended \*/i), { target: { value: '8' } });
     fireEvent.change(screen.getByLabelText(/held \*/i), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText(/date \*/i), { target: { value: '2026-09-10' } });
-    
+
     fireEvent.click(screen.getAllByRole('button', { name: /record attendance/i })[1]);
-    
+
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/subjects/2/attendance', {
         classes_attended: 8,
@@ -152,26 +152,26 @@ describe('SubjectDetail - Attendance', () => {
       ]);
       return Promise.resolve(null);
     });
-    
+
     (api.put as any).mockResolvedValueOnce({ id: 'att-edit' });
-    
+
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => expect(screen.getAllByTestId('attendance-pct').length).toBe(1));
-    
+
     const editButton = screen.getByRole('button', { name: 'Edit attendance' });
     fireEvent.click(editButton);
-    
+
     await waitFor(() => {
       expect((screen.getByLabelText(/attended \*/i) as HTMLInputElement).value).toBe('6');
       expect((screen.getByLabelText(/held \*/i) as HTMLInputElement).value).toBe('8');
     });
-    
+
     fireEvent.change(screen.getByLabelText(/attended \*/i), { target: { value: '4' } });
 
-    
+
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
-    
+
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/attendance/att-edit', {
         classes_attended: 4,
@@ -191,17 +191,17 @@ describe('SubjectDetail - Attendance', () => {
       ]);
       return Promise.resolve(null);
     });
-    
+
     (api.delete as any).mockResolvedValueOnce(null);
     window.confirm = vi.fn().mockReturnValue(true);
-    
+
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => expect(screen.getAllByTestId('attendance-pct').length).toBe(1));
-    
+
     const deleteButton = screen.getByRole('button', { name: 'Delete attendance' });
     fireEvent.click(deleteButton);
-    
+
     await waitFor(() => {
       expect(api.delete).toHaveBeenCalledWith('/attendance/att-del');
       expect(window.confirm).toHaveBeenCalled();
@@ -214,7 +214,7 @@ describe('SubjectDetail - Assessments', () => {
     vi.clearAllMocks();
     queryClient.clear();
     window.history.pushState({}, 'Test', '/app/semesters/1/subjects/2');
-    
+
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/semesters/1') return Promise.resolve({ id: '1', name: 'Fall 2026' });
       if (url === '/subjects/2') return Promise.resolve({ id: '2', name: 'Math 101', code: 'M101' });
@@ -226,7 +226,7 @@ describe('SubjectDetail - Assessments', () => {
 
   test('renders subject details and empty assessments state', async () => {
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => {
       expect(screen.getByText('Math 101 (M101)')).not.toBeNull();
       expect(screen.getByText('Fall 2026 • Subject Details')).not.toBeNull();
@@ -248,49 +248,49 @@ describe('SubjectDetail - Assessments', () => {
     });
 
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => {
       expect(screen.getByText('Midterm')).not.toBeNull();
     });
-    
+
     const marksEls = screen.getAllByTestId('assessment-marks');
-    
+
     // Midterm (Scored)
     expect(marksEls[0].textContent).toContain('85');
-    
+
     // Final (Pending, null marks)
     expect(screen.getByText('Final')).not.toBeNull();
     expect(marksEls[1].textContent).toContain('--');
     expect(screen.getByText('PENDING')).not.toBeNull();
-    
+
     // Quiz 1 (Scored, 0 marks - genuine zero)
     expect(screen.getByText('Quiz 1')).not.toBeNull();
     expect(marksEls[2].textContent).toContain('0');
-    
+
     expect(screen.getAllByText('SCORED').length).toBe(2);
   });
 
   test('validates assessment creation form', async () => {
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => expect(screen.getByText('No assessments')).not.toBeNull());
-    
+
     fireEvent.click(screen.getByRole('button', { name: /add assessment/i }));
     fireEvent.click(screen.getByRole('button', { name: /create assessment/i }));
-    
+
     await waitFor(() => {
       expect(screen.getByText(/name is required/i)).not.toBeNull();
       expect(screen.getByText(/category is required/i)).not.toBeNull();
       expect(screen.getByText(/max marks is required/i)).not.toBeNull();
     });
-    
+
     // Test custom validation
     fireEvent.change(screen.getByLabelText(/max marks \*/i), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText(/^marks/i), { target: { value: '150' } });
     fireEvent.change(screen.getByLabelText(/weightage/i), { target: { value: '150' } });
-    
+
     fireEvent.click(screen.getByRole('button', { name: /create assessment/i }));
-    
+
     await waitFor(() => {
       expect(screen.getByText(/marks must be between 0 and 100/i)).not.toBeNull();
       expect(screen.getByText(/weightage must be between 0 and 100/i)).not.toBeNull();
@@ -299,21 +299,21 @@ describe('SubjectDetail - Assessments', () => {
 
   test('creates assessment successfully', async () => {
     (api.post as any).mockResolvedValueOnce({ id: '20' });
-    
+
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => expect(screen.getByText('No assessments')).not.toBeNull());
-    
+
     fireEvent.click(screen.getByRole('button', { name: /add assessment/i }));
-    
+
     fireEvent.change(screen.getByLabelText(/assessment name \*/i), { target: { value: 'Assignment 1' } });
     fireEvent.change(screen.getByLabelText(/category \*/i), { target: { value: 'Homework' } });
     fireEvent.change(screen.getByLabelText(/max marks \*/i), { target: { value: '50' } });
     fireEvent.change(screen.getByLabelText(/^status/i), { target: { value: 'pending' } });
     // Empty marks should send null
-    
+
     fireEvent.click(screen.getByRole('button', { name: /create assessment/i }));
-    
+
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/subjects/2/assessments', {
         name: 'Assignment 1',
@@ -326,7 +326,7 @@ describe('SubjectDetail - Assessments', () => {
       });
     });
   });
-  
+
   test('updates assessment successfully', async () => {
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/semesters/1') return Promise.resolve({ id: '1', name: 'Fall 2026' });
@@ -337,26 +337,26 @@ describe('SubjectDetail - Assessments', () => {
       ]);
       return Promise.resolve(null);
     });
-    
+
     (api.put as any).mockResolvedValueOnce({ id: '10' });
-    
+
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     await waitFor(() => expect(screen.getByText('Midterm')).not.toBeNull());
-    
+
     // Click edit button
     const editButton = screen.getByRole('button', { name: 'Edit assessment' });
     fireEvent.click(editButton);
-    
+
     await waitFor(() => {
       expect((screen.getByLabelText(/assessment name \*/i) as HTMLInputElement).value).toBe('Midterm');
     });
-    
+
     fireEvent.change(screen.getByLabelText(/^marks/i), { target: { value: '95' } });
     fireEvent.change(screen.getByLabelText(/^status/i), { target: { value: 'scored' } });
-    
+
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
-    
+
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/assessments/10', {
         name: 'Midterm',
@@ -387,13 +387,13 @@ describe('SubjectDetail - Assessments', () => {
     });
 
     render(<SubjectDetail />, { wrapper: Wrapper });
-    
+
     // Wait for empty state
     await waitFor(() => expect(screen.getByText('No attendance recorded')).not.toBeNull());
-    
+
     // Click Record Attendance to open form
     fireEvent.click(screen.getByRole('button', { name: /record attendance/i }));
-    
+
     // Check the default date value matches the LOCAL date of the mocked time
     await waitFor(() => {
       const dateInput = screen.getByLabelText(/date \*/i) as HTMLInputElement;
@@ -402,5 +402,105 @@ describe('SubjectDetail - Assessments', () => {
     });
 
     vi.useRealTimers();
+  });
+
+  describe('SubjectDetail - Calculator', () => {
+    beforeEach(() => {
+      (api.get as any).mockImplementation((url: string) => {
+        if (url === '/semesters/1') return Promise.resolve({ id: '1', name: 'Fall 2026' });
+        if (url === '/subjects/2') return Promise.resolve({ id: '2', name: 'Math 101' });
+        if (url === '/subjects/2/assessments') return Promise.resolve([]);
+        if (url === '/subjects/2/attendance') return Promise.resolve([]);
+        return Promise.resolve(null);
+      });
+    });
+
+    test('validates calculator target input', async () => {
+      render(<SubjectDetail />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByText('Required-Score Calculator')).not.toBeNull());
+
+      fireEvent.click(screen.getByRole('button', { name: /calculate/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Target percentage is required')).not.toBeNull();
+      });
+
+      fireEvent.change(screen.getByLabelText(/target percentage/i), { target: { value: '-10' } });
+      fireEvent.click(screen.getByRole('button', { name: /calculate/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Must be a non-negative number')).not.toBeNull();
+      });
+    });
+
+    test('calculates achievable target successfully', async () => {
+      (api.post as any).mockResolvedValueOnce({
+        earned_points: 15.0,
+        remaining_weight: 80.0,
+        total_valid_weight: 100.0,
+        target_achieved: false,
+        impossible: false,
+        required_remaining_percentage: 75.0,
+        required_points_from_remaining: 60.0
+      });
+
+      render(<SubjectDetail />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByText('Required-Score Calculator')).not.toBeNull());
+
+      fireEvent.change(screen.getByLabelText(/target percentage/i), { target: { value: '75' } });
+      fireEvent.click(screen.getByRole('button', { name: /calculate/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Calculation Result for 75%/)).not.toBeNull();
+        expect(screen.getByText(/75.00%/)).not.toBeNull();
+        expect(screen.getByText(/60.00 more points out of the 80.00% remaining weight/)).not.toBeNull();
+      });
+
+      expect(api.post).toHaveBeenCalledWith('/subjects/2/calculate-required', { target_percentage: 75 });
+    });
+
+    test('displays impossible target result', async () => {
+      (api.post as any).mockResolvedValueOnce({
+        earned_points: 0.0,
+        remaining_weight: 50.0,
+        total_valid_weight: 100.0,
+        target_achieved: false,
+        impossible: true,
+        required_remaining_percentage: 150.0,
+        required_points_from_remaining: 75.0
+      });
+
+      render(<SubjectDetail />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByText('Required-Score Calculator')).not.toBeNull());
+
+      fireEvent.change(screen.getByLabelText(/target percentage/i), { target: { value: '75' } });
+      fireEvent.click(screen.getByRole('button', { name: /calculate/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/It is impossible to reach this target/)).not.toBeNull();
+      });
+    });
+
+    test('displays already-achieved target result', async () => {
+      (api.post as any).mockResolvedValueOnce({
+        earned_points: 80.0,
+        remaining_weight: 0.0,
+        total_valid_weight: 100.0,
+        target_achieved: true,
+        impossible: false,
+        required_remaining_percentage: 0.0,
+        required_points_from_remaining: -5.0
+      });
+
+      render(<SubjectDetail />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByText('Required-Score Calculator')).not.toBeNull());
+
+      fireEvent.change(screen.getByLabelText(/target percentage/i), { target: { value: '75' } });
+      fireEvent.click(screen.getByRole('button', { name: /calculate/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/You have already achieved this target score/)).not.toBeNull();
+      });
+    });
   });
 });

@@ -54,6 +54,20 @@ export interface Attendance {
   updated_at: string | null;
 }
 
+export interface CalculatorRequest {
+  target_percentage: number;
+}
+
+export interface CalculatorResponse {
+  earned_points: number;
+  remaining_weight: number;
+  total_valid_weight: number;
+  target_achieved: boolean;
+  impossible: boolean;
+  required_remaining_percentage: number;
+  required_points_from_remaining: number;
+}
+
 export interface Assessment {
   id: string;
   name: string;

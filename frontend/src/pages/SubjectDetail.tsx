@@ -62,6 +62,17 @@ const attendanceSchema = z.object({
 
 type AttendanceForm = z.infer<typeof attendanceSchema>;
 
+const calculatorSchema = z.object({
+  target_percentage: z.string().min(1, 'Target percentage is required'),
+}).superRefine((data, ctx) => {
+  const target = Number(data.target_percentage);
+  if (isNaN(target) || target < 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Must be a non-negative number', path: ['target_percentage'] });
+  }
+});
+
+type CalculatorForm = z.infer<typeof calculatorSchema>;
+
 export default function SubjectDetail() {
   const { semesterId, subjectId } = useParams<{ semesterId: string, subjectId: string }>();
   const queryClient = useQueryClient();
@@ -154,6 +165,35 @@ export default function SubjectDetail() {
     onSuccess: () => invalidateAttendance(),
     onError: (err: any) => setError(err.message || 'Failed to delete attendance'),
   });
+
+  const [calculatorResult, setCalculatorResult] = useState<any>(null);
+  const [lastTargetCalculated, setLastTargetCalculated] = useState<number | null>(null);
+
+  const {
+    register: registerCalculator,
+    handleSubmit: handleSubmitCalculator,
+    formState: { errors: calculatorErrors },
+  } = useForm<CalculatorForm>({
+    resolver: zodResolver(calculatorSchema),
+  });
+
+  const calculateMutation = useMutation({
+    mutationFn: (data: any) => api.post(`/subjects/${subjectId}/calculate-required`, data),
+    onSuccess: (res: any) => {
+      setCalculatorResult(res);
+      setError('');
+    },
+    onError: (err: any) => {
+      setError(err.message || 'Failed to calculate required score');
+      setCalculatorResult(null);
+    }
+  });
+
+  const onSubmitCalculator = (data: CalculatorForm) => {
+    const target = Number(data.target_percentage);
+    setLastTargetCalculated(target);
+    calculateMutation.mutate({ target_percentage: target });
+  };
 
   const editingAssessment = assessments?.find(a => a.id === editingAssessmentId);
   const {
@@ -551,6 +591,48 @@ export default function SubjectDetail() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* CALCULATOR SECTION */}
+      <section>
+        <div className="flex items-center justify-between border-t border-gray-200 pt-6 mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Required-Score Calculator</h2>
+        </div>
+        <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
+          <form onSubmit={handleSubmitCalculator(onSubmitCalculator)}>
+            <div className="flex items-end gap-4">
+              <div className="space-y-2 flex-1 max-w-sm">
+                <Label htmlFor="target_percentage">Target Percentage</Label>
+                <div className="flex items-center gap-2">
+                  <Input id="target_percentage" type="number" step="0.1" {...registerCalculator('target_percentage')} />
+                  <span className="text-gray-500">%</span>
+                </div>
+                {calculatorErrors.target_percentage && <p className="text-sm text-red-600">{calculatorErrors.target_percentage.message}</p>}
+              </div>
+              <Button type="submit" disabled={calculateMutation.isPending}>
+                {calculateMutation.isPending ? 'Calculating...' : 'Calculate'}
+              </Button>
+            </div>
+          </form>
+
+          {calculatorResult && (
+            <div className="mt-6 p-4 rounded-md border border-blue-100 bg-blue-50 text-blue-900">
+              <h3 className="font-semibold mb-2">Calculation Result for {lastTargetCalculated}%:</h3>
+              {calculatorResult.target_achieved ? (
+                <p>You have already achieved this target score! (Current points: {Number(calculatorResult.earned_points).toFixed(2)})</p>
+              ) : calculatorResult.impossible ? (
+                <p>It is impossible to reach this target. (Remaining weight: {Number(calculatorResult.remaining_weight).toFixed(2)}%)</p>
+              ) : (
+                <div>
+                  <p>You need <strong>{Number(calculatorResult.required_remaining_percentage).toFixed(2)}%</strong> on all remaining assessments.</p>
+                  <p className="text-sm text-blue-800 mt-2">
+                    (Requires {Number(calculatorResult.required_points_from_remaining).toFixed(2)} more points out of the {Number(calculatorResult.remaining_weight).toFixed(2)}% remaining weight.)
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );

@@ -119,3 +119,25 @@ def list_attendance(
 ):
     subject = get_subject_or_404(db, subject_id, current_user.id)
     return db.query(models.Attendance).filter(models.Attendance.subject_id == subject.id).all()
+
+from ..calculator import calculate_required_score
+
+@router.post("/{subject_id}/calculate-required", response_model=schemas.CalculatorResponse)
+def calculate_subject_required_score(
+    subject_id: UUID,
+    request: schemas.CalculatorRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    subject = get_subject_or_404(db, subject_id, current_user.id)
+    assessments = db.query(models.Assessment).filter(models.Assessment.subject_id == subject.id).all()
+    ass_list = [
+        {
+            "status": a.status,
+            "marks": a.marks,
+            "max_marks": a.max_marks,
+            "weightage": a.weightage
+        }
+        for a in assessments
+    ]
+    return calculate_required_score(request.target_percentage, ass_list)
