@@ -34,6 +34,10 @@ export default function AppLayout() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">Welcome, {user.name}</span>
+            <Link to="/app/settings" className="text-sm text-gray-600 hover:text-gray-900 font-medium hidden sm:inline">
+              Settings
+            </Link>
+            <span className="text-sm text-gray-300 hidden sm:inline">|</span>
             <Button variant="ghost" size="sm" onClick={logout} className="gap-2 text-gray-600 hover:text-gray-900">
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>

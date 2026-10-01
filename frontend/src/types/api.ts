@@ -96,3 +96,10 @@ export interface ImportResponse {
   imported_records: number;
   errors: ImportError[];
 }
+
+export interface ConsentStatus {
+  data_donation_consent: boolean;
+  consent_updated_at: string | null;
+  consent_text_version: string | null;
+}
+

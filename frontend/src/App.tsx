@@ -9,6 +9,7 @@ import Semesters from './pages/Semesters';
 import SemesterDetail from './pages/SemesterDetail';
 import SubjectDetail from './pages/SubjectDetail';
 import Import from './pages/Import';
+import Settings from './pages/Settings';
 
 const queryClient = new QueryClient();
 
@@ -71,6 +72,7 @@ export default function App() {
               <Route path="semesters/:semesterId" element={<SemesterDetail />} />
               <Route path="semesters/:semesterId/subjects/:subjectId" element={<SubjectDetail />} />
               <Route path="import" element={<Import />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
             
             <Route path="*" element={<Navigate to="/login" replace />} />
