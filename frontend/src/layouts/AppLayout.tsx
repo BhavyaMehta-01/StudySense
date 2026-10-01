@@ -27,6 +27,9 @@ export default function AppLayout() {
               <Link to="/app/semesters" className="text-sm font-medium text-gray-700 hover:text-primary">
                 Semesters
               </Link>
+              <Link to="/app/import" className="text-sm font-medium text-gray-700 hover:text-primary">
+                Import CSV
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4">

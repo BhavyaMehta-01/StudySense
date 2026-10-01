@@ -83,3 +83,16 @@ export interface Assessment {
   created_at: string;
   updated_at: string | null;
 }
+
+export interface ImportError {
+  row: number;
+  column: string | null;
+  message: string;
+}
+
+export interface ImportResponse {
+  success: boolean;
+  total_processed: number;
+  imported_records: number;
+  errors: ImportError[];
+}
