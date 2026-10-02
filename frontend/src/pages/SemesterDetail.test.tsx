@@ -106,4 +106,34 @@ describe('SemesterDetail', () => {
       });
     });
   });
+
+  test('deletes subject and invalidates queries', async () => {
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters/123') return Promise.resolve({ id: '123', name: 'Fall' });
+      if (url === '/semesters/123/subjects') return Promise.resolve([{ id: '1', name: 'Math 101' }]);
+      return Promise.resolve(null);
+    });
+    (api.delete as any).mockResolvedValueOnce({});
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => true);
+    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(<SemesterDetail />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Math 101')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+
+    await waitFor(() => {
+      expect(api.delete).toHaveBeenCalledWith('/subjects/1');
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['semesters', '123', 'subjects'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['subjects'] });
+    });
+
+    confirmSpy.mockRestore();
+    invalidateQueriesSpy.mockRestore();
+  });
 });

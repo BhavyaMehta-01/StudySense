@@ -53,6 +53,7 @@ export default function SemesterDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['semesters', semesterId, 'subjects'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
     },
   });
 

@@ -99,4 +99,33 @@ describe('Semesters', () => {
       });
     });
   });
+
+  test('deletes semester and invalidates queries', async () => {
+    (api.get as any).mockResolvedValueOnce([
+      { id: '1', name: 'Fall 2026', academic_year: '2026' }
+    ]);
+    (api.delete as any).mockResolvedValueOnce({});
+
+    // Mock window.confirm
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => true);
+    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(<Semesters />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fall 2026')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+
+    await waitFor(() => {
+      expect(api.delete).toHaveBeenCalledWith('/semesters/1');
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['semesters'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['subjects'] });
+    });
+
+    confirmSpy.mockRestore();
+    invalidateQueriesSpy.mockRestore();
+  });
 });
