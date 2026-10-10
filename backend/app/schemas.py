@@ -41,6 +41,7 @@ class SemesterUpdate(BaseModel):
 class SemesterResponse(SemesterBase):
     id: UUID
     user_id: UUID
+    is_active: bool = False
     created_at: datetime
     updated_at: Optional[datetime]
     class Config: from_attributes = True
@@ -137,3 +138,43 @@ class CalculatorResponse(BaseModel):
     impossible: bool
     required_remaining_percentage: Decimal
     required_points_from_remaining: Decimal
+
+class StudyPlanCreate(BaseModel):
+    start_date: date
+    end_date: date
+    available_minutes: int
+
+    @model_validator(mode='after')
+    def check_dates_and_minutes(self):
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be before or equal to end_date")
+        if self.start_date.weekday() != 0:
+            raise ValueError("start_date must be a Monday")
+        if self.end_date.weekday() != 6:
+            raise ValueError("end_date must be a Sunday")
+        if self.available_minutes <= 0:
+            raise ValueError("available_minutes must be positive")
+        if self.available_minutes % 5 != 0:
+            raise ValueError("available_minutes must be divisible by 5")
+        return self
+
+class StudyPlanAllocationResponse(BaseModel):
+    id: UUID
+    plan_id: UUID
+    subject_id: Optional[UUID] = None
+    allocated_minutes: int
+    snapshot_state: dict
+    explanation_code: str
+    class Config: from_attributes = True
+
+class StudyPlanResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    start_date: date
+    end_date: date
+    available_minutes: int
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime]
+    allocations: List[StudyPlanAllocationResponse] = []
+    class Config: from_attributes = True

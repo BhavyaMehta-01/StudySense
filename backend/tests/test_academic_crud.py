@@ -21,14 +21,14 @@ def db_session(setup_database):
     connection = engine.connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection, join_transaction_mode="create_savepoint")
-    
+
     from app.dependencies import get_db
     def override_get_db():
         yield session
-        
+
     app.dependency_overrides[get_db] = override_get_db
     yield session
-    
+
     app.dependency_overrides.clear()
     session.close()
     transaction.rollback()
@@ -50,30 +50,30 @@ def test_unauthenticated_access_rejected():
 def test_semester_crud(db_session):
     token, user_id = get_token_for_user(db_session, "crud1@example.com", "CRUD 1")
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     # 1. create semester
     resp = client.post("/semesters", json={"name": "Fall 2026", "academic_year": "2026-2027"}, headers=headers)
     assert resp.status_code == 200
     sem_id = resp.json()["id"]
-    
+
     # 2. list semester
     resp = client.get("/semesters", headers=headers)
     assert len(resp.json()) == 1
-    
+
     # 3. get semester
     resp = client.get(f"/semesters/{sem_id}", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["name"] == "Fall 2026"
-    
+
     # 4. update semester
     resp = client.put(f"/semesters/{sem_id}", json={"name": "Spring 2027"}, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["name"] == "Spring 2027"
-    
+
     # 5. delete semester
     resp = client.delete(f"/semesters/{sem_id}", headers=headers)
     assert resp.status_code == 204
-    
+
     # verify deleted
     resp = client.get(f"/semesters/{sem_id}", headers=headers)
     assert resp.status_code == 404
@@ -81,19 +81,19 @@ def test_semester_crud(db_session):
 def test_subject_assessment_attendance_crud(db_session):
     token, user_id = get_token_for_user(db_session, "crud2@example.com", "CRUD 2")
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     # create semester
     sem_resp = client.post("/semesters", json={"name": "Sem 1", "academic_year": "2026"}, headers=headers)
     sem_id = sem_resp.json()["id"]
-    
+
     # 6. subject creation
     sub_resp = client.post(f"/semesters/{sem_id}/subjects", json={"name": "Math", "code": "M101", "credits": 3}, headers=headers)
     assert sub_resp.status_code == 200
     sub_id = sub_resp.json()["id"]
-    
+
     # subject retrieval
     assert client.get(f"/subjects/{sub_id}", headers=headers).status_code == 200
-    
+
     # 7. assessment creation
     ass_resp = client.post(
         f"/subjects/{sub_id}/assessments",
@@ -102,7 +102,7 @@ def test_subject_assessment_attendance_crud(db_session):
     )
     assert ass_resp.status_code == 200
     ass_id = ass_resp.json()["id"]
-    
+
     # 9. attendance creation
     att_resp = client.post(
         f"/subjects/{sub_id}/attendance",
@@ -145,37 +145,37 @@ def test_subject_assessment_attendance_crud(db_session):
     )
     assert pending_no_marks_resp.status_code == 200
 
-    
+
 def test_idor_protection_and_invalid_ids(db_session):
     token_a, user_a = get_token_for_user(db_session, "a@example.com", "A")
     headers_a = {"Authorization": f"Bearer {token_a}"}
-    
+
     token_b, user_b = get_token_for_user(db_session, "b@example.com", "B")
     headers_b = {"Authorization": f"Bearer {token_b}"}
-    
+
     # User A creates resources
     sem = client.post("/semesters", json={"name": "Sem A", "academic_year": "2026"}, headers=headers_a).json()
     sub = client.post(f"/semesters/{sem['id']}/subjects", json={"name": "Sub A"}, headers=headers_a).json()
     ass = client.post(f"/subjects/{sub['id']}/assessments", json={"name": "Ass A", "category": "quiz", "max_marks": 10}, headers=headers_a).json()
     att = client.post(f"/subjects/{sub['id']}/attendance", json={"classes_attended": 1, "classes_held": 1, "recorded_on": "2026-10-01"}, headers=headers_a).json()
-    
+
     # 11-14. User B attempts to access User A's resources
     assert client.get(f"/semesters/{sem['id']}", headers=headers_b).status_code == 404
     assert client.get(f"/subjects/{sub['id']}", headers=headers_b).status_code == 404
     assert client.get(f"/assessments/{ass['id']}", headers=headers_b).status_code == 404
     assert client.get(f"/attendance/{att['id']}", headers=headers_b).status_code == 404
-    
+
     assert client.put(f"/semesters/{sem['id']}", json={"name": "Hacked"}, headers=headers_b).status_code == 404
     assert client.delete(f"/subjects/{sub['id']}", headers=headers_b).status_code == 404
-    
+
     # 16. Invalid IDs
     import uuid
     random_id = str(uuid.uuid4())
     assert client.get(f"/semesters/{random_id}", headers=headers_a).status_code == 404
-    
+
     # 17. Deletion Cascades
     client.delete(f"/semesters/{sem['id']}", headers=headers_a)
-    
+
     # DB check for cascades
     assert db_session.query(Semester).filter_by(id=sem['id']).count() == 0
     assert db_session.query(Subject).filter_by(id=sub['id']).count() == 0
@@ -185,25 +185,92 @@ def test_idor_protection_and_invalid_ids(db_session):
 def test_idor_cross_user_creation_and_update(db_session):
     token_a, user_a = get_token_for_user(db_session, "a2@example.com", "A2")
     headers_a = {"Authorization": f"Bearer {token_a}"}
-    
+
     token_b, user_b = get_token_for_user(db_session, "b2@example.com", "B2")
     headers_b = {"Authorization": f"Bearer {token_b}"}
-    
+
     sem_a = client.post("/semesters", json={"name": "Sem A", "academic_year": "2026"}, headers=headers_a).json()
     sub_a = client.post(f"/semesters/{sem_a['id']}/subjects", json={"name": "Sub A"}, headers=headers_a).json()
     ass_a = client.post(f"/subjects/{sub_a['id']}/assessments", json={"name": "Ass A", "category": "quiz", "max_marks": 10, "weightage": 50}, headers=headers_a).json()
-    
+
     # User B tries to create under User A's parents
     assert client.post(f"/semesters/{sem_a['id']}/subjects", json={"name": "Sub B"}, headers=headers_b).status_code == 404
     assert client.post(f"/subjects/{sub_a['id']}/assessments", json={"name": "Ass B", "category": "quiz", "max_marks": 10}, headers=headers_b).status_code == 404
     assert client.post(f"/subjects/{sub_a['id']}/attendance", json={"classes_attended": 1, "classes_held": 1, "recorded_on": "2026-10-01"}, headers=headers_b).status_code == 404
-    
+
     # Test updating weightage successfully without triggering 100% cap (since it ignores itself)
     resp = client.put(f"/assessments/{ass_a['id']}", json={"weightage": 60}, headers=headers_a)
     assert resp.status_code == 200
     assert resp.json()["weightage"] == "60.00"
-    
+
     # Test updating weightage to an invalid amount
     resp = client.put(f"/assessments/{ass_a['id']}", json={"weightage": 101}, headers=headers_a)
     assert resp.status_code == 400
+
+def test_activate_semester(db_session):
+    token_a, user_a = get_token_for_user(db_session, "active1@example.com", "Active 1")
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    token_b, user_b = get_token_for_user(db_session, "active2@example.com", "Active 2")
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    # User A creates two semesters
+    sem_a1 = client.post("/semesters", json={"name": "Sem A1", "academic_year": "2026"}, headers=headers_a).json()
+    sem_a2 = client.post("/semesters", json={"name": "Sem A2", "academic_year": "2026"}, headers=headers_a).json()
+
+    # User B creates one semester
+    sem_b1 = client.post("/semesters", json={"name": "Sem B1", "academic_year": "2026"}, headers=headers_b).json()
+
+    # Both default to inactive
+    assert not sem_a1.get("is_active")
+    assert not sem_a2.get("is_active")
+
+    # User A activates sem_a1
+    resp = client.patch(f"/semesters/{sem_a1['id']}/activate", headers=headers_a)
+    assert resp.status_code == 200
+    assert resp.json()["is_active"] is True
+
+    # User A activates sem_a2 -> sem_a1 should become inactive
+    resp = client.patch(f"/semesters/{sem_a2['id']}/activate", headers=headers_a)
+    assert resp.status_code == 200
+    assert resp.json()["is_active"] is True
+
+    # Check sem_a1 is now inactive
+    sem_a1_updated = client.get(f"/semesters/{sem_a1['id']}", headers=headers_a).json()
+    assert sem_a1_updated["is_active"] is False
+
+    # User B activates sem_b1 -> should not affect A
+    client.patch(f"/semesters/{sem_b1['id']}/activate", headers=headers_b)
+    sem_b1_updated = client.get(f"/semesters/{sem_b1['id']}", headers=headers_b).json()
+    assert sem_b1_updated["is_active"] is True
+
+    sem_a2_updated = client.get(f"/semesters/{sem_a2['id']}", headers=headers_a).json()
+    assert sem_a2_updated["is_active"] is True
+
+    # User A tries to activate User B's semester -> 404
+    resp = client.patch(f"/semesters/{sem_b1['id']}/activate", headers=headers_a)
+    assert resp.status_code == 404
+
+def test_activation_rollback(db_session):
+    token, user_id = get_token_for_user(db_session, "rollback@example.com", "Rollback")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sem1 = client.post("/semesters", json={"name": "Sem 1", "academic_year": "2026"}, headers=headers).json()
+    sem2 = client.post("/semesters", json={"name": "Sem 2", "academic_year": "2026"}, headers=headers).json()
+
+    # Activate sem1
+    client.patch(f"/semesters/{sem1['id']}/activate", headers=headers)
+    assert client.get(f"/semesters/{sem1['id']}", headers=headers).json()["is_active"] is True
+
+    # Force a failure on activate sem2 by patching the database commit
+    from unittest.mock import patch
+    from sqlalchemy.exc import IntegrityError
+
+    with patch("sqlalchemy.orm.Session.commit", side_effect=IntegrityError("forced error", params=None, orig=None)):
+        resp = client.patch(f"/semesters/{sem2['id']}/activate", headers=headers)
+        assert resp.status_code == 409
+
+    # Verify sem1 is still active
+    assert client.get(f"/semesters/{sem1['id']}", headers=headers).json()["is_active"] is True
+    assert client.get(f"/semesters/{sem2['id']}", headers=headers).json()["is_active"] is False
 

@@ -71,6 +71,52 @@ def delete_semester(
     db.commit()
     return None
 
+@router.patch("/{semester_id}/activate", response_model=schemas.SemesterResponse)
+def activate_semester(
+    semester_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Lock the user row to serialize concurrent activation requests for the same user
+    db.query(models.User).filter(models.User.id == current_user.id).with_for_update().first()
+
+    # Verify the requested semester belongs to the user
+    semester = get_semester_or_404(db, semester_id, current_user.id)
+
+    # If already active, just return it
+    if semester.is_active:
+        return semester
+
+    # Deactivate the currently active semester for this user (if any)
+    active_semester = db.query(models.Semester).filter(
+        models.Semester.user_id == current_user.id,
+        models.Semester.is_active == True
+    ).first()
+
+    if active_semester:
+        active_semester.is_active = False
+        db.add(active_semester)
+
+    # Flush the transaction to ensure the old active semester is deactivated
+    # before we activate the new one, avoiding unique constraint violation
+    db.flush()
+
+    # Activate the requested semester
+    semester.is_active = True
+    db.add(semester)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not activate semester due to a conflict. Please try again."
+        )
+
+    db.refresh(semester)
+    return semester
+
 @router.post("/{semester_id}/subjects", response_model=schemas.SubjectResponse)
 def create_subject(
     semester_id: UUID,
