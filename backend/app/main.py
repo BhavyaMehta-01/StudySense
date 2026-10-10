@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from .config import settings
-from .routers import auth, semesters, subjects, assessments, attendance, consent, dashboard, import_csv, study_plans
+from .routers import auth, semesters, subjects, assessments, attendance, consent, dashboard, import_csv, study_plans, study_sessions
 
 app = FastAPI(title=settings.project_name)
 
@@ -13,6 +13,7 @@ app.include_router(consent.router)
 app.include_router(dashboard.router)
 app.include_router(import_csv.router)
 app.include_router(study_plans.router)
+app.include_router(study_sessions.router)
 
 
 @app.get("/health")

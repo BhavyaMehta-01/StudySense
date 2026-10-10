@@ -178,3 +178,32 @@ class StudyPlanResponse(BaseModel):
     updated_at: Optional[datetime]
     allocations: List[StudyPlanAllocationResponse] = []
     class Config: from_attributes = True
+
+class StudySessionCreate(BaseModel):
+    allocation_id: UUID
+    date: date
+    duration_minutes: int
+    status: str
+
+    @model_validator(mode='after')
+    def validate_duration_and_status(self):
+        if self.duration_minutes < 0:
+            raise ValueError("duration_minutes must be >= 0")
+        if self.status not in ("completed", "partial", "skipped"):
+            raise ValueError("status must be 'completed', 'partial', or 'skipped'")
+        if self.status == "skipped" and self.duration_minutes != 0:
+            raise ValueError("duration_minutes must be 0 when status is 'skipped'")
+        if self.status in ("completed", "partial") and self.duration_minutes <= 0:
+            raise ValueError(f"duration_minutes must be > 0 when status is '{self.status}'")
+        return self
+
+class StudySessionResponse(BaseModel):
+    id: UUID
+    allocation_id: Optional[UUID] = None
+    user_id: UUID
+    date: date
+    duration_minutes: int
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime]
+    class Config: from_attributes = True
