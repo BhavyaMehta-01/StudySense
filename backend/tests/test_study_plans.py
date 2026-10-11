@@ -236,3 +236,120 @@ def test_database_failure_rollback(db_session):
     from app.models import StudyPlan
     count = db_session.query(StudyPlan).filter_by(user_id=user_id).count()
     assert count == 0
+
+def test_get_active_study_plan_unauthenticated():
+    resp = client.get("/study-plans/active")
+    assert resp.status_code in (401, 403)
+
+def test_get_active_study_plan_not_found(db_session):
+    token, user_id = create_user_and_token(db_session, "noactiveplan@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.get("/study-plans/active", headers=headers)
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "No active study plan found"
+
+def test_get_active_study_plan_success_and_isolation(db_session):
+    token1, user_id1 = create_user_and_token(db_session, "user1_active@example.com")
+    headers1 = {"Authorization": f"Bearer {token1}"}
+
+    token2, user_id2 = create_user_and_token(db_session, "user2_active@example.com")
+    headers2 = {"Authorization": f"Bearer {token2}"}
+
+    # Setup User 1 active semester and plan
+    sem1 = client.post("/semesters", json={"name": "Sem1", "academic_year": "2026"}, headers=headers1).json()
+    client.patch(f"/semesters/{sem1['id']}/activate", headers=headers1)
+    sub1 = client.post(f"/semesters/{sem1['id']}/subjects", json={"name": "Math", "target_percentage": 85}, headers=headers1).json()
+    client.post(f"/subjects/{sub1['id']}/assessments", json={"name": "Quiz", "category": "quiz", "max_marks": 50, "weightage": 30}, headers=headers1)
+
+    create_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-18",
+        "available_minutes": 150
+    }, headers=headers1)
+    assert create_resp.status_code == 200
+    created_plan = create_resp.json()
+
+    # User 1 retrieves active plan
+    get_resp = client.get("/study-plans/active", headers=headers1)
+    assert get_resp.status_code == 200
+    plan = get_resp.json()
+    assert plan["id"] == created_plan["id"]
+    assert plan["user_id"] == str(user_id1)
+    assert plan["is_active"] is True
+    assert plan["available_minutes"] == 150
+    assert plan["start_date"] == "2026-10-12"
+    assert plan["end_date"] == "2026-10-18"
+    assert len(plan["allocations"]) == 1
+    assert plan["allocations"][0]["allocated_minutes"] == 150
+    assert plan["allocations"][0]["subject_id"] == sub1["id"]
+    assert plan["allocations"][0]["snapshot_state"]["subject_target"] == 85
+
+    # Cross-user isolation: User 2 has no active plan, must get 404
+    user2_resp = client.get("/study-plans/active", headers=headers2)
+    assert user2_resp.status_code == 404
+    assert user2_resp.json()["detail"] == "No active study plan found"
+
+def test_get_active_study_plan_ignores_inactive(db_session):
+    from app.models import StudyPlan
+    token, user_id = create_user_and_token(db_session, "inactiveonly@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Insert an inactive plan directly in DB
+    inactive_plan = StudyPlan(
+        user_id=user_id,
+        start_date=date(2026, 10, 5),
+        end_date=date(2026, 10, 11),
+        available_minutes=120,
+        is_active=False
+    )
+    db_session.add(inactive_plan)
+    db_session.commit()
+
+    resp = client.get("/study-plans/active", headers=headers)
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "No active study plan found"
+
+def test_subject_target_percentage_schema_validation(db_session):
+    token, user_id = create_user_and_token(db_session, "targetpct@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sem = client.post("/semesters", json={"name": "Sem1", "academic_year": "2026"}, headers=headers).json()
+
+    # Valid target_percentage
+    resp = client.post(f"/semesters/{sem['id']}/subjects", json={
+        "name": "Physics",
+        "code": "PHY101",
+        "credits": 4,
+        "target_percentage": 90
+    }, headers=headers)
+    assert resp.status_code == 200
+    subject_data = resp.json()
+    assert subject_data["target_percentage"] == 90
+    sub_id = subject_data["id"]
+
+    # Retrieval preserves target_percentage
+    get_sub = client.get(f"/subjects/{sub_id}", headers=headers)
+    assert get_sub.status_code == 200
+    assert get_sub.json()["target_percentage"] == 90
+
+    # Target percentage omitted defaults to None
+    resp_no_target = client.post(f"/semesters/{sem['id']}/subjects", json={
+        "name": "Chemistry"
+    }, headers=headers)
+    assert resp_no_target.status_code == 200
+    assert resp_no_target.json()["target_percentage"] is None
+
+    # Invalid target_percentage (> 100)
+    resp_invalid_high = client.post(f"/semesters/{sem['id']}/subjects", json={
+        "name": "Biology",
+        "target_percentage": 105
+    }, headers=headers)
+    assert resp_invalid_high.status_code == 422
+
+    # Invalid target_percentage (< 0)
+    resp_invalid_low = client.post(f"/semesters/{sem['id']}/subjects", json={
+        "name": "Biology",
+        "target_percentage": -5
+    }, headers=headers)
+    assert resp_invalid_low.status_code == 422

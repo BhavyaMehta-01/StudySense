@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { api } from '@/api/client';
 import type { DashboardSummary } from '@/types/api';
+import StudyPlanProgress from '@/components/dashboard/StudyPlanProgress';
 
 export default function Dashboard() {
   const { data, isLoading, error } = useQuery<DashboardSummary>({
@@ -37,6 +38,11 @@ export default function Dashboard() {
     );
   }
 
+  const subjectMap = data.subject_summaries?.reduce<Record<string, string>>((acc, s) => {
+    acc[s.subject_id] = s.subject_name;
+    return acc;
+  }, {}) || {};
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -49,6 +55,8 @@ export default function Dashboard() {
           <p className="mt-2 text-3xl font-semibold text-gray-900">{data.total_subjects}</p>
         </div>
       </div>
+
+      <StudyPlanProgress subjectMap={subjectMap} />
 
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="border-b border-gray-200 px-6 py-4">

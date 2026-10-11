@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, model_validator
+from pydantic import BaseModel, EmailStr, model_validator, Field
 from uuid import UUID
 
 class UserRegister(BaseModel):
@@ -50,6 +50,7 @@ class SubjectBase(BaseModel):
     name: str
     code: Optional[str] = None
     credits: Optional[Decimal] = None
+    target_percentage: Optional[int] = Field(default=None, ge=0, le=100)
 
 class SubjectCreate(SubjectBase):
     pass
@@ -58,6 +59,7 @@ class SubjectUpdate(BaseModel):
     name: Optional[str] = None
     code: Optional[str] = None
     credits: Optional[Decimal] = None
+    target_percentage: Optional[int] = Field(default=None, ge=0, le=100)
 
 class SubjectResponse(SubjectBase):
     id: UUID

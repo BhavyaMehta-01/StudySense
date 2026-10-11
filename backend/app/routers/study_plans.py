@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
 from datetime import date
 from typing import List
@@ -11,6 +11,32 @@ from ..allocation_engine import (
 )
 
 router = APIRouter(prefix="/study-plans", tags=["study-plans"])
+
+@router.get("/active", response_model=schemas.StudyPlanResponse)
+def get_active_study_plan(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Retrieve the current active study plan for the authenticated user,
+    including its allocations.
+
+    Returns 404 if no active study plan exists for the user.
+    """
+    plan = db.query(models.StudyPlan).options(
+        selectinload(models.StudyPlan.allocations)
+    ).filter(
+        models.StudyPlan.user_id == current_user.id,
+        models.StudyPlan.is_active == True
+    ).first()
+
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active study plan found"
+        )
+
+    return plan
 
 @router.post("", response_model=schemas.StudyPlanResponse)
 def create_study_plan(

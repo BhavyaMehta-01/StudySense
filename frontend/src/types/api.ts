@@ -32,6 +32,7 @@ export interface Semester {
   name: string;
   academic_year: string;
   user_id: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string | null;
 }
@@ -41,6 +42,7 @@ export interface Subject {
   name: string;
   code: string | null;
   credits: number | null;
+  target_percentage?: number | null;
   semester_id: string;
   created_at: string;
   updated_at: string | null;
@@ -103,3 +105,62 @@ export interface ConsentStatus {
   consent_text_version: string | null;
 }
 
+export interface AllocationSnapshotState {
+  subject_name: string;
+  target_deficit: number | null;
+  urgency_score: number | null;
+  raw_weight: number;
+  scaled_weight: number;
+  days_to_exam: number | null;
+  subject_target: number | null;
+  current_percentage: number | null;
+  remaining_weight: number | null;
+  [key: string]: any;
+}
+
+export interface StudyPlanAllocation {
+  id: string;
+  plan_id: string;
+  subject_id: string | null;
+  allocated_minutes: number;
+  snapshot_state: AllocationSnapshotState | Record<string, any>;
+  explanation_code: string;
+}
+
+export interface StudyPlan {
+  id: string;
+  user_id: string;
+  start_date: string;
+  end_date: string;
+  available_minutes: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+  allocations: StudyPlanAllocation[];
+}
+
+export interface StudyPlanCreate {
+  start_date: string;
+  end_date: string;
+  available_minutes: number;
+}
+
+export type StudySessionStatus = 'completed' | 'partial' | 'skipped';
+
+export interface StudySessionCreate {
+  allocation_id: string;
+  date: string;
+  duration_minutes: number;
+  status: StudySessionStatus;
+}
+
+export interface StudySession {
+  id: string;
+  allocation_id: string | null;
+  user_id: string;
+  date: string;
+  duration_minutes: number;
+  status: StudySessionStatus;
+  created_at: string;
+  updated_at: string | null;
+}

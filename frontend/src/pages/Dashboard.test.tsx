@@ -99,4 +99,75 @@ describe('Dashboard', () => {
     const link = screen.getByRole('link');
     expect(link.getAttribute('href')).toBe('/app/semesters/sem-123/subjects/sub-456');
   });
+
+  test('renders populated dashboard with study plan progress integrated', async () => {
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/dashboard') {
+        return Promise.resolve({
+          total_semesters: 1,
+          total_subjects: 1,
+          subject_summaries: [
+            {
+              semester_id: 'sem-1',
+              semester_name: 'Fall 2026',
+              subject_id: 'sub-1',
+              subject_name: 'Database Systems',
+              earned_points: '85.50',
+              completed_weight: '100.00',
+              pending_weight: '0.00',
+              completed_work_percentage: '85.50',
+              attendance_percentage: '90.00',
+            },
+          ],
+        });
+      }
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2026', academic_year: '2026', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve({
+          id: 'plan-1',
+          user_id: 'u-1',
+          start_date: '2026-10-12',
+          end_date: '2026-10-18',
+          available_minutes: 120,
+          is_active: true,
+          allocations: [
+            {
+              id: 'alloc-1',
+              plan_id: 'plan-1',
+              subject_id: 'sub-1',
+              allocated_minutes: 120,
+              snapshot_state: { subject_name: 'Database Systems', subject_target: 90 },
+              explanation_code: 'deficit_priority',
+            },
+          ],
+        });
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([
+          { id: 's-1', allocation_id: 'alloc-1', date: '2026-10-12', duration_minutes: 60, status: 'completed' },
+        ]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    // Wait for full cascade of queries (dashboard, plan, and sessions) to render
+    await waitFor(() => {
+      expect(screen.getByText('1 study session recorded for this plan')).not.toBeNull();
+    });
+
+    // Check study plan progress details
+    expect(screen.getByText('Subject Performance')).not.toBeNull();
+    expect(screen.getByText('Weekly Study Plan')).not.toBeNull();
+    expect(screen.getAllByText('60 / 120 min (50%)').length).toBe(2);
+
+    // Check existing dashboard performance section intact
+    expect(screen.getByText('Total Semesters')).not.toBeNull();
+    expect(screen.getByText('Total Subjects')).not.toBeNull();
+  });
 });
