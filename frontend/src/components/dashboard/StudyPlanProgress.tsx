@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import type { Semester, StudyPlan, StudySession } from '@/types/api';
 import { Calendar, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import LogStudySessionForm from './LogStudySessionForm';
 
 interface StudyPlanProgressProps {
   subjectMap?: Record<string, string>;
@@ -22,6 +25,9 @@ function formatDateRange(startStr: string, endStr: string): string {
 }
 
 export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgressProps) {
+  const [isLogging, setIsLogging] = useState(false);
+  const [selectedAllocId, setSelectedAllocId] = useState<string | undefined>(undefined);
+
   const {
     data: semesters,
     isLoading: isLoadingSemesters,
@@ -143,7 +149,7 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
               {activeSemester.name} • {activePlan.available_minutes} min available weekly
             </p>
           </div>
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
             <div>
               <span className="text-xs text-gray-500 block">Total Planned</span>
               <span className="font-semibold text-gray-900">{totalAllocated} min</span>
@@ -155,6 +161,15 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
                 {totalLogged} min
               </span>
             </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setSelectedAllocId(undefined);
+                setIsLogging((prev) => !prev);
+              }}
+            >
+              {isLogging ? 'Cancel' : 'Log study session'}
+            </Button>
           </div>
         </div>
 
@@ -183,6 +198,25 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
           </div>
         </div>
       </div>
+
+      {/* Log Study Session Form */}
+      {isLogging && (
+        <div className="border-b border-gray-200 bg-gray-50/60 p-6">
+          <LogStudySessionForm
+            plan={activePlan}
+            subjectMap={subjectMap}
+            initialAllocationId={selectedAllocId}
+            onClose={() => {
+              setIsLogging(false);
+              setSelectedAllocId(undefined);
+            }}
+            onSuccess={() => {
+              setIsLogging(false);
+              setSelectedAllocId(undefined);
+            }}
+          />
+        </div>
+      )}
 
       {/* Allocation breakdown */}
       <div className="divide-y divide-gray-200">
@@ -260,6 +294,17 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
                       +{logged - alloc.allocated_minutes} min over planned allocation
                     </span>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAllocId(alloc.id);
+                      setIsLogging(true);
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium self-end transition-colors"
+                  >
+                    Log session
+                  </button>
                 </div>
               </div>
             </div>

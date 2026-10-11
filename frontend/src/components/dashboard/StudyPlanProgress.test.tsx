@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import StudyPlanProgress from './StudyPlanProgress';
@@ -7,6 +7,7 @@ import { api, ApiError } from '@/api/client';
 vi.mock('@/api/client', () => ({
   api: {
     get: vi.fn(),
+    post: vi.fn(),
   },
   ApiError: class ApiError extends Error {
     public status: number;
@@ -265,5 +266,117 @@ describe('StudyPlanProgress', () => {
 
     expect(screen.getByText('Operating Systems')).not.toBeNull();
     expect(screen.getAllByText('0 / 60 min (0%)').length).toBe(2);
+  });
+
+  test('toggles Log Study Session form when header button is clicked', async () => {
+    const mockPlan = {
+      id: 'plan-1',
+      user_id: 'user-1',
+      start_date: '2026-10-12',
+      end_date: '2026-10-18',
+      available_minutes: 60,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-1',
+          plan_id: 'plan-1',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Operating Systems' },
+          explanation_code: 'no_work_needed',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2026', academic_year: '2026', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockPlan);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Weekly Study Plan')).not.toBeNull();
+    });
+
+    const logBtn = screen.getByRole('button', { name: /log study session/i });
+    fireEvent.click(logBtn);
+
+    // Form should now be visible
+    expect(screen.getByText('Log Study Session')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /save study session/i })).not.toBeNull();
+
+    // Clicking cancel closes the form
+    const cancelBtns = screen.getAllByRole('button', { name: /^cancel$/i });
+    fireEvent.click(cancelBtns[0]);
+
+    expect(screen.queryByText('Log Study Session')).toBeNull();
+  });
+
+  test('preselects allocation when clicking row Log session button', async () => {
+    const mockPlan = {
+      id: 'plan-1',
+      user_id: 'user-1',
+      start_date: '2026-10-12',
+      end_date: '2026-10-18',
+      available_minutes: 120,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-1',
+          plan_id: 'plan-1',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Operating Systems' },
+          explanation_code: 'none',
+        },
+        {
+          id: 'alloc-2',
+          plan_id: 'plan-1',
+          subject_id: 'sub-2',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Computer Networks' },
+          explanation_code: 'none',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2026', academic_year: '2026', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockPlan);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Computer Networks')).not.toBeNull();
+    });
+
+    const rowLogBtns = screen.getAllByRole('button', { name: /log session/i });
+    // Click second allocation's Log session button
+    fireEvent.click(rowLogBtns[1]);
+
+    const allocSelect = screen.getByLabelText(/subject allocation/i) as HTMLSelectElement;
+    expect(allocSelect.value).toBe('alloc-2');
   });
 });
