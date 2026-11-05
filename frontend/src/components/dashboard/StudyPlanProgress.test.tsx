@@ -1,5 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { BrowserRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import StudyPlanProgress from './StudyPlanProgress';
 import { api, ApiError } from '@/api/client';
@@ -8,6 +9,7 @@ vi.mock('@/api/client', () => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
+    patch: vi.fn(),
   },
   ApiError: class ApiError extends Error {
     public status: number;
@@ -27,7 +29,7 @@ const queryClient = new QueryClient({
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>
-    {children}
+    <BrowserRouter>{children}</BrowserRouter>
   </QueryClientProvider>
 );
 
@@ -44,7 +46,7 @@ describe('StudyPlanProgress', () => {
     expect(screen.getByText(/loading study plan progress/i)).not.toBeNull();
   });
 
-  test('renders no active semester state when no semester is marked active', async () => {
+  test('renders no active semester state with link to semesters page when no semester is marked active', async () => {
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/semesters') {
         return Promise.resolve([
@@ -59,10 +61,13 @@ describe('StudyPlanProgress', () => {
     await waitFor(() => {
       expect(screen.getByText(/no active semester/i)).not.toBeNull();
       expect(screen.getByText(/do not have an active semester selected/i)).not.toBeNull();
+      const link = screen.getByRole('link', { name: /go to semesters/i });
+      expect(link).not.toBeNull();
+      expect(link.getAttribute('href')).toBe('/app/semesters');
     });
   });
 
-  test('renders no active plan state on 404 API response', async () => {
+  test('renders no active plan state on 404 API response and toggles generation form', async () => {
     (api.get as any).mockImplementation((url: string) => {
       if (url === '/semesters') {
         return Promise.resolve([
@@ -81,6 +86,22 @@ describe('StudyPlanProgress', () => {
       expect(screen.getByRole('heading', { name: /no active study plan/i })).not.toBeNull();
       expect(screen.getByText(/no active study plan found for fall 2026/i)).not.toBeNull();
     });
+
+    const createBtn = screen.getByRole('button', { name: /create weekly study plan/i });
+    expect(createBtn).not.toBeNull();
+
+    // Click Create Weekly Study Plan to open form
+    fireEvent.click(createBtn);
+
+    expect(screen.getByText(/generating plan for/i)).not.toBeNull();
+    expect(screen.getByLabelText(/weekly available study time/i)).not.toBeNull();
+
+    // Click cancel in the form to close it
+    const cancelBtn = screen.getAllByRole('button', { name: /cancel/i })[0];
+    fireEvent.click(cancelBtn);
+
+    expect(screen.queryByLabelText(/weekly available study time/i)).toBeNull();
+    expect(screen.getByRole('button', { name: /create weekly study plan/i })).not.toBeNull();
   });
 
   test('renders error state on non-404 API failure', async () => {
@@ -194,7 +215,7 @@ describe('StudyPlanProgress', () => {
 
     await waitFor(() => {
       expect(screen.getByText('3 study sessions recorded for this plan')).not.toBeNull();
-    });
+    }, { timeout: 3000 });
 
     // Check Header and Budget
     expect(screen.getByText('Weekly Study Plan')).not.toBeNull();
@@ -378,5 +399,436 @@ describe('StudyPlanProgress', () => {
 
     const allocSelect = screen.getByLabelText(/subject allocation/i) as HTMLSelectElement;
     expect(allocSelect.value).toBe('alloc-2');
+  });
+
+  test('renders deactivate button on active plan and triggers PATCH request', async () => {
+    const mockPlan = {
+      id: 'plan-1',
+      user_id: 'user-1',
+      start_date: '2099-10-12',
+      end_date: '2099-10-18',
+      available_minutes: 60,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-1',
+          plan_id: 'plan-1',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Operating Systems' },
+          explanation_code: 'none',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2099', academic_year: '2099', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockPlan);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    (api.patch as any).mockResolvedValue({
+      ...mockPlan,
+      is_active: false,
+    });
+
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Weekly Study Plan')).not.toBeNull();
+    });
+
+    const deactivateBtn = screen.getByRole('button', { name: /deactivate plan/i });
+    expect(deactivateBtn).not.toBeNull();
+
+    fireEvent.click(deactivateBtn);
+
+    await waitFor(() => {
+      expect(api.patch).toHaveBeenCalledWith('/study-plans/plan-1/deactivate');
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['study-plans'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['study-sessions'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+    });
+
+    invalidateSpy.mockRestore();
+  });
+
+  test('prevents duplicate deactivation submissions while pending', async () => {
+    const mockPlan = {
+      id: 'plan-1',
+      user_id: 'user-1',
+      start_date: '2099-10-12',
+      end_date: '2099-10-18',
+      available_minutes: 60,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-1',
+          plan_id: 'plan-1',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Operating Systems' },
+          explanation_code: 'none',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2099', academic_year: '2099', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockPlan);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    let resolvePatch: any;
+    (api.patch as any).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePatch = resolve;
+        })
+    );
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Weekly Study Plan')).not.toBeNull();
+    });
+
+    const deactivateBtn = screen.getByRole('button', { name: /deactivate plan/i });
+    fireEvent.click(deactivateBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /deactivating\.\.\./i })).not.toBeNull();
+      expect(
+        (screen.getByRole('button', { name: /deactivating\.\.\./i }) as HTMLButtonElement).disabled
+      ).toBe(true);
+    });
+
+    // Clicking again should not trigger another api.patch
+    fireEvent.click(deactivateBtn);
+    expect(api.patch).toHaveBeenCalledTimes(1);
+
+    resolvePatch({ ...mockPlan, is_active: false });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /deactivating\.\.\./i })).toBeNull();
+    });
+  });
+
+  test('displays error message when deactivation fails', async () => {
+    const mockPlan = {
+      id: 'plan-1',
+      user_id: 'user-1',
+      start_date: '2099-10-12',
+      end_date: '2099-10-18',
+      available_minutes: 60,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-1',
+          plan_id: 'plan-1',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Operating Systems' },
+          explanation_code: 'none',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2099', academic_year: '2099', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockPlan);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    (api.patch as any).mockRejectedValue(
+      new (ApiError as any)(500, { detail: 'Server error deactivating plan' })
+    );
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Weekly Study Plan')).not.toBeNull();
+    });
+
+    const deactivateBtn = screen.getByRole('button', { name: /deactivate plan/i });
+    fireEvent.click(deactivateBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).not.toBeNull();
+      expect(screen.getByText('Server error deactivating plan')).not.toBeNull();
+    });
+  });
+
+  test('renders expired plan notice when plan end_date is in the past', async () => {
+    const mockExpiredPlan = {
+      id: 'plan-expired',
+      user_id: 'user-1',
+      start_date: '2020-01-06',
+      end_date: '2020-01-12',
+      available_minutes: 60,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-1',
+          plan_id: 'plan-expired',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Operating Systems' },
+          explanation_code: 'none',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Past Semester', academic_year: '2020', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockExpiredPlan);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    (api.patch as any).mockResolvedValue({ ...mockExpiredPlan, is_active: false });
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText(/this study plan's week has ended/i)).not.toBeNull();
+    });
+
+    // There should be a deactivate button inside the notice
+    const notice = screen.getByRole('status');
+    expect(notice).not.toBeNull();
+    const noticeDeactivateBtn = notice.querySelector('button');
+    expect(noticeDeactivateBtn).not.toBeNull();
+    expect(noticeDeactivateBtn?.textContent).toContain('Deactivate plan');
+
+    fireEvent.click(noticeDeactivateBtn!);
+
+    await waitFor(() => {
+      expect(api.patch).toHaveBeenCalledWith('/study-plans/plan-expired/deactivate');
+    });
+  });
+
+  test('does not render expired plan notice when plan end_date is in the future', async () => {
+    const mockFuturePlan = {
+      id: 'plan-future',
+      user_id: 'user-1',
+      start_date: '2099-10-12',
+      end_date: '2099-10-18',
+      available_minutes: 60,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-1',
+          plan_id: 'plan-future',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: { subject_name: 'Operating Systems' },
+          explanation_code: 'none',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Future Semester', academic_year: '2099', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockFuturePlan);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Weekly Study Plan')).not.toBeNull();
+    });
+
+    expect(screen.queryByText(/this study plan's week has ended/i)).toBeNull();
+  });
+
+  test('renders expandable allocation explanation and toggles on click', async () => {
+    const mockPlanWithDrivers = {
+      id: 'plan-drivers',
+      user_id: 'user-1',
+      start_date: '2099-10-12',
+      end_date: '2099-10-18',
+      available_minutes: 180,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-urgency',
+          plan_id: 'plan-drivers',
+          subject_id: 'sub-1',
+          allocated_minutes: 120,
+          snapshot_state: {
+            subject_name: 'Algorithms',
+            subject_target: 85,
+            remaining_weight: 40,
+            next_assessment: { days: 3, weight: 20 },
+            primary_driver: 'URGENCY',
+          },
+          explanation_code: 'ALLOCATED_URGENCY',
+        },
+        {
+          id: 'alloc-deficit',
+          plan_id: 'plan-drivers',
+          subject_id: 'sub-2',
+          allocated_minutes: 60,
+          snapshot_state: {
+            subject_name: 'Database Systems',
+            subject_target: 90,
+            subject_current: 75,
+            primary_driver: 'DEFICIT',
+          },
+          explanation_code: 'ALLOCATED_DEFICIT',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2026', academic_year: '2026', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockPlanWithDrivers);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Algorithms')).not.toBeNull();
+      expect(screen.getByText('Database Systems')).not.toBeNull();
+    });
+
+    // Check driver badges are student friendly and not raw internal codes
+    expect(screen.getByText('Upcoming assessment')).not.toBeNull();
+    expect(screen.getByText('Target deficit')).not.toBeNull();
+    expect(screen.queryByText(/ALLOCATED_URGENCY/i)).toBeNull();
+    expect(screen.queryByText(/ALLOCATED_DEFICIT/i)).toBeNull();
+
+    // Check "Why this allocation?" buttons
+    const whyButtons = screen.getAllByRole('button', { name: /why this allocation\?/i });
+    expect(whyButtons.length).toBe(2);
+    expect(whyButtons[0].getAttribute('aria-expanded')).toBe('false');
+
+    // Initially explanations are not visible
+    expect(screen.queryByText(/Prioritized for an upcoming assessment/i)).toBeNull();
+
+    // Expand the first allocation
+    fireEvent.click(whyButtons[0]);
+    expect(whyButtons[0].getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText(/Prioritized for an upcoming assessment \(20% weight\) scheduled in 3 days\./i)).not.toBeNull();
+    expect(screen.getByText('Next assessment: in 3 days')).not.toBeNull();
+    expect(screen.getByText('Assessment weight: 20%')).not.toBeNull();
+    expect(screen.getByText('Remaining weight: 40%')).not.toBeNull();
+
+    // Collapse the first allocation
+    fireEvent.click(whyButtons[0]);
+    expect(whyButtons[0].getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText(/Prioritized for an upcoming assessment/i)).toBeNull();
+
+    // Expand second allocation (Deficit)
+    fireEvent.click(whyButtons[1]);
+    expect(whyButtons[1].getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText(/Allocated to close a grade deficit: currently at 75% toward your target of 90%\./i)).not.toBeNull();
+    expect(screen.getByText('Target grade: 90%')).not.toBeNull();
+    expect(screen.getByText('Current grade: 75%')).not.toBeNull();
+    expect(screen.getByText('Score deficit: 15%')).not.toBeNull();
+  });
+
+  test('handles unknown driver or missing snapshot gracefully', async () => {
+    const mockPlanUnknown = {
+      id: 'plan-unknown',
+      user_id: 'user-1',
+      start_date: '2099-10-12',
+      end_date: '2099-10-18',
+      available_minutes: 60,
+      is_active: true,
+      allocations: [
+        {
+          id: 'alloc-empty',
+          plan_id: 'plan-unknown',
+          subject_id: 'sub-1',
+          allocated_minutes: 60,
+          snapshot_state: {},
+          explanation_code: 'SOME_UNKNOWN_CODE',
+        },
+      ],
+    };
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Fall 2026', academic_year: '2026', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.resolve(mockPlanUnknown);
+      }
+      if (url.startsWith('/study-sessions')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<StudyPlanProgress />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /why this allocation\?/i })).not.toBeNull();
+    });
+
+    const whyButton = screen.getByRole('button', { name: /why this allocation\?/i });
+    fireEvent.click(whyButton);
+
+    expect(screen.getByText('60 minutes allocated for regular study in this subject.')).not.toBeNull();
   });
 });

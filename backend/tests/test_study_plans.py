@@ -353,3 +353,207 @@ def test_subject_target_percentage_schema_validation(db_session):
         "target_percentage": -5
     }, headers=headers)
     assert resp_invalid_low.status_code == 422
+
+def test_deactivate_study_plan_unauthenticated():
+    resp = client.patch("/study-plans/00000000-0000-0000-0000-000000000000/deactivate")
+    assert resp.status_code in (401, 403)
+
+def test_deactivate_study_plan_success(db_session):
+    from app.models import StudyPlan
+    token, user_id = create_user_and_token(db_session, "deact_success@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sem = client.post("/semesters", json={"name": "Sem1", "academic_year": "2026"}, headers=headers).json()
+    client.patch(f"/semesters/{sem['id']}/activate", headers=headers)
+    sub = client.post(f"/semesters/{sem['id']}/subjects", json={"name": "Math"}, headers=headers).json()
+    client.post(f"/subjects/{sub['id']}/assessments", json={
+        "name": "Midterm", "category": "midsem", "max_marks": 100, "weightage": 50
+    }, headers=headers)
+
+    create_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-18",
+        "available_minutes": 100
+    }, headers=headers)
+    assert create_resp.status_code == 200
+    plan_id = create_resp.json()["id"]
+
+    # Deactivate the plan
+    deact_resp = client.patch(f"/study-plans/{plan_id}/deactivate", headers=headers)
+    assert deact_resp.status_code == 200
+    data = deact_resp.json()
+    assert data["id"] == plan_id
+    assert data["is_active"] is False
+    assert len(data["allocations"]) == 1
+    assert data["allocations"][0]["allocated_minutes"] == 100
+
+    # Active plan endpoint now returns 404
+    active_resp = client.get("/study-plans/active", headers=headers)
+    assert active_resp.status_code == 404
+    assert active_resp.json()["detail"] == "No active study plan found"
+
+    # Plan in DB remains with allocations preserved
+    db_plan = db_session.query(StudyPlan).filter_by(id=plan_id).first()
+    assert db_plan is not None
+    assert db_plan.is_active is False
+    assert len(db_plan.allocations) == 1
+
+def test_deactivate_study_plan_idempotent(db_session):
+    token, user_id = create_user_and_token(db_session, "deact_idemp@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sem = client.post("/semesters", json={"name": "Sem1", "academic_year": "2026"}, headers=headers).json()
+    client.patch(f"/semesters/{sem['id']}/activate", headers=headers)
+    sub = client.post(f"/semesters/{sem['id']}/subjects", json={"name": "Math"}, headers=headers).json()
+    client.post(f"/subjects/{sub['id']}/assessments", json={
+        "name": "Midterm", "category": "midsem", "max_marks": 100, "weightage": 50
+    }, headers=headers)
+
+    create_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-18",
+        "available_minutes": 60
+    }, headers=headers)
+    plan_id = create_resp.json()["id"]
+
+    # First deactivation
+    resp1 = client.patch(f"/study-plans/{plan_id}/deactivate", headers=headers)
+    assert resp1.status_code == 200
+    assert resp1.json()["is_active"] is False
+
+    # Second deactivation (idempotent)
+    resp2 = client.patch(f"/study-plans/{plan_id}/deactivate", headers=headers)
+    assert resp2.status_code == 200
+    assert resp2.json()["is_active"] is False
+
+def test_create_second_plan_after_deactivation(db_session):
+    from app.models import StudyPlan
+    token, user_id = create_user_and_token(db_session, "deact_second@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sem = client.post("/semesters", json={"name": "Sem1", "academic_year": "2026"}, headers=headers).json()
+    client.patch(f"/semesters/{sem['id']}/activate", headers=headers)
+    sub = client.post(f"/semesters/{sem['id']}/subjects", json={"name": "Math"}, headers=headers).json()
+    client.post(f"/subjects/{sub['id']}/assessments", json={
+        "name": "Midterm", "category": "midsem", "max_marks": 100, "weightage": 50
+    }, headers=headers)
+
+    # Week 1 plan
+    p1_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-18",
+        "available_minutes": 60
+    }, headers=headers)
+    assert p1_resp.status_code == 200
+    p1_id = p1_resp.json()["id"]
+
+    # Attempting to create another active plan without deactivation gives 409
+    conflict_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-19",
+        "end_date": "2026-10-25",
+        "available_minutes": 60
+    }, headers=headers)
+    assert conflict_resp.status_code == 409
+
+    # Deactivate week 1 plan
+    deact_resp = client.patch(f"/study-plans/{p1_id}/deactivate", headers=headers)
+    assert deact_resp.status_code == 200
+
+    # Week 2 plan now succeeds!
+    p2_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-19",
+        "end_date": "2026-10-25",
+        "available_minutes": 120
+    }, headers=headers)
+    assert p2_resp.status_code == 200
+    p2_data = p2_resp.json()
+    assert p2_data["is_active"] is True
+    assert p2_data["available_minutes"] == 120
+    p2_id = p2_data["id"]
+
+    # Active plan endpoint returns plan 2
+    active_resp = client.get("/study-plans/active", headers=headers)
+    assert active_resp.status_code == 200
+    assert active_resp.json()["id"] == p2_id
+
+    # In DB: plan 1 is inactive, plan 2 is active
+    db_p1 = db_session.query(StudyPlan).filter_by(id=p1_id).first()
+    db_p2 = db_session.query(StudyPlan).filter_by(id=p2_id).first()
+    assert db_p1.is_active is False
+    assert db_p2.is_active is True
+
+def test_deactivate_study_plan_cross_user_and_not_found(db_session):
+    token1, user_id1 = create_user_and_token(db_session, "user1_deact@example.com")
+    headers1 = {"Authorization": f"Bearer {token1}"}
+
+    token2, user_id2 = create_user_and_token(db_session, "user2_deact@example.com")
+    headers2 = {"Authorization": f"Bearer {token2}"}
+
+    # User 1 creates a plan
+    sem1 = client.post("/semesters", json={"name": "Sem1", "academic_year": "2026"}, headers=headers1).json()
+    client.patch(f"/semesters/{sem1['id']}/activate", headers=headers1)
+    sub1 = client.post(f"/semesters/{sem1['id']}/subjects", json={"name": "Math"}, headers=headers1).json()
+    client.post(f"/subjects/{sub1['id']}/assessments", json={
+        "name": "Midterm", "category": "midsem", "max_marks": 100, "weightage": 50
+    }, headers=headers1)
+
+    p1_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-18",
+        "available_minutes": 60
+    }, headers=headers1)
+    p1_id = p1_resp.json()["id"]
+
+    # User 2 tries to deactivate User 1's plan -> 404
+    cross_resp = client.patch(f"/study-plans/{p1_id}/deactivate", headers=headers2)
+    assert cross_resp.status_code == 404
+    assert cross_resp.json()["detail"] == "Study plan not found"
+
+    # Nonexistent plan ID -> 404
+    not_found_resp = client.patch("/study-plans/00000000-0000-0000-0000-000000000000/deactivate", headers=headers1)
+    assert not_found_resp.status_code == 404
+    assert not_found_resp.json()["detail"] == "Study plan not found"
+
+def test_deactivate_study_plan_preserves_historical_sessions(db_session):
+    token, user_id = create_user_and_token(db_session, "deact_hist_sess@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sem = client.post("/semesters", json={"name": "Sem1", "academic_year": "2026"}, headers=headers).json()
+    client.patch(f"/semesters/{sem['id']}/activate", headers=headers)
+    sub = client.post(f"/semesters/{sem['id']}/subjects", json={"name": "Math"}, headers=headers).json()
+    client.post(f"/subjects/{sub['id']}/assessments", json={
+        "name": "Midterm", "category": "midsem", "max_marks": 100, "weightage": 50
+    }, headers=headers)
+
+    plan_resp = client.post("/study-plans", json={
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-18",
+        "available_minutes": 60
+    }, headers=headers)
+    plan_data = plan_resp.json()
+    plan_id = plan_data["id"]
+    alloc_id = plan_data["allocations"][0]["id"]
+
+    # Log study session against this allocation
+    sess_resp = client.post("/study-sessions", json={
+        "allocation_id": alloc_id,
+        "date": "2026-10-14",
+        "duration_minutes": 45,
+        "status": "completed"
+    }, headers=headers)
+    assert sess_resp.status_code == 200
+    sess_id = sess_resp.json()["id"]
+
+    # Deactivate the plan
+    deact_resp = client.patch(f"/study-plans/{plan_id}/deactivate", headers=headers)
+    assert deact_resp.status_code == 200
+    assert deact_resp.json()["is_active"] is False
+
+    # Historical session is still accessible via get_study_sessions with plan_id filter
+    sessions_list_resp = client.get(f"/study-sessions?plan_id={plan_id}", headers=headers)
+    assert sessions_list_resp.status_code == 200
+    sessions_list = sessions_list_resp.json()
+    assert len(sessions_list) == 1
+    assert sessions_list[0]["id"] == sess_id
+    assert sessions_list[0]["allocation_id"] == alloc_id
+    assert sessions_list[0]["duration_minutes"] == 45

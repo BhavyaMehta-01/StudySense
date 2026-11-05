@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
 from datetime import date
 from typing import List
+from uuid import UUID
 
 from .. import schemas, models
 from ..dependencies import get_db, get_current_user
@@ -150,3 +151,38 @@ def create_study_plan(
 
     db.refresh(new_plan)
     return new_plan
+
+@router.patch("/{plan_id}/deactivate", response_model=schemas.StudyPlanResponse)
+def deactivate_study_plan(
+    plan_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Deactivate a study plan owned by the current user.
+    Sets is_active to False. Preserves allocations and associated sessions.
+    Idempotent: returns 200 if the plan is already inactive.
+    Returns 404 if the plan does not exist or belongs to another user.
+    """
+    # Lock the user row to serialize concurrent modifications for the same user
+    db.query(models.User).filter(models.User.id == current_user.id).with_for_update().first()
+
+    plan = db.query(models.StudyPlan).options(
+        selectinload(models.StudyPlan.allocations)
+    ).filter(
+        models.StudyPlan.id == plan_id,
+        models.StudyPlan.user_id == current_user.id
+    ).first()
+
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Study plan not found"
+        )
+
+    if plan.is_active:
+        plan.is_active = False
+        db.commit()
+        db.refresh(plan)
+
+    return plan

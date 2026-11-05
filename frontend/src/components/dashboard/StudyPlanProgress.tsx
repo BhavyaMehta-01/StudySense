@@ -1,10 +1,14 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import type { Semester, StudyPlan, StudySession } from '@/types/api';
-import { Calendar, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router';
 import LogStudySessionForm from './LogStudySessionForm';
+import GenerateStudyPlanForm from './GenerateStudyPlanForm';
+import { isPlanExpired } from './studyPlanDates';
+import { formatAllocationExplanation } from './allocationExplanation';
 
 interface StudyPlanProgressProps {
   subjectMap?: Record<string, string>;
@@ -25,8 +29,38 @@ function formatDateRange(startStr: string, endStr: string): string {
 }
 
 export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgressProps) {
+  const queryClient = useQueryClient();
   const [isLogging, setIsLogging] = useState(false);
   const [selectedAllocId, setSelectedAllocId] = useState<string | undefined>(undefined);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
+  const [expandedAllocIds, setExpandedAllocIds] = useState<Record<string, boolean>>({});
+
+  const toggleExplanation = (allocId: string) => {
+    setExpandedAllocIds((prev) => ({
+      ...prev,
+      [allocId]: !prev[allocId],
+    }));
+  };
+
+  const deactivateMutation = useMutation({
+    mutationFn: (planId: string) => api.patch<StudyPlan>(`/study-plans/${planId}/deactivate`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['study-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['study-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setDeactivateError(null);
+    },
+    onError: (err: any) => {
+      setDeactivateError(err?.data?.detail || err.message || 'Failed to deactivate study plan');
+    },
+  });
+
+  const handleDeactivate = () => {
+    if (!activePlan?.id || deactivateMutation.isPending) return;
+    setDeactivateError(null);
+    deactivateMutation.mutate(activePlan.id);
+  };
 
   const {
     data: semesters,
@@ -102,17 +136,37 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
         <p className="mt-1 text-xs text-gray-500">
           You do not have an active semester selected. Please mark a semester as active to view your weekly study plan.
         </p>
+        <div className="mt-4">
+          <Link to="/app/semesters">
+            <Button variant="outline" size="sm">Go to Semesters</Button>
+          </Link>
+        </div>
       </div>
     );
   }
 
   if (!activePlan) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
-        <h3 className="text-sm font-medium text-gray-900">No active study plan</h3>
-        <p className="mt-1 text-xs text-gray-500">
-          No active study plan found for {activeSemester.name}.
-        </p>
+      <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8">
+        {!isGenerating ? (
+          <div className="text-center">
+            <h3 className="text-sm font-medium text-gray-900">No active study plan</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              No active study plan found for {activeSemester.name}.
+            </p>
+            <div className="mt-4">
+              <Button onClick={() => setIsGenerating(true)} size="sm">
+                Create Weekly Study Plan
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <GenerateStudyPlanForm
+            activeSemester={activeSemester}
+            onClose={() => setIsGenerating(false)}
+            onSuccess={() => setIsGenerating(false)}
+          />
+        )}
       </div>
     );
   }
@@ -131,6 +185,7 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
   const totalLogged = safeSessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
   const overallPercent = totalAllocated > 0 ? Math.round((totalLogged / totalAllocated) * 100) : 0;
   const isOverallOver = totalLogged > totalAllocated;
+  const isExpired = isPlanExpired(activePlan.end_date);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -162,7 +217,16 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
               </span>
             </div>
             <Button
+              variant="outline"
               size="sm"
+              disabled={deactivateMutation.isPending}
+              onClick={handleDeactivate}
+            >
+              {deactivateMutation.isPending ? 'Deactivating...' : 'Deactivate plan'}
+            </Button>
+            <Button
+              size="sm"
+              disabled={deactivateMutation.isPending}
               onClick={() => {
                 setSelectedAllocId(undefined);
                 setIsLogging((prev) => !prev);
@@ -172,6 +236,38 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
             </Button>
           </div>
         </div>
+
+        {/* Deactivation error banner */}
+        {deactivateError && (
+          <div role="alert" className="mt-4 flex items-start gap-2 rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-600" />
+            <span>{deactivateError}</span>
+          </div>
+        )}
+
+        {/* Expired plan notice */}
+        {isExpired && (
+          <div
+            role="status"
+            className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <span>
+                This study plan's week has ended. Deactivate it to create a new weekly study plan.
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={deactivateMutation.isPending}
+              onClick={handleDeactivate}
+              className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900 self-start sm:self-auto flex-shrink-0"
+            >
+              {deactivateMutation.isPending ? 'Deactivating...' : 'Deactivate plan'}
+            </Button>
+          </div>
+        )}
 
         {/* Overall Progress Bar */}
         <div className="mt-4">
@@ -237,20 +333,23 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
           const isOver = logged > alloc.allocated_minutes;
           const isComplete = percent >= 100;
 
+          const explanation = formatAllocationExplanation(alloc);
+          const isExpanded = !!expandedAllocIds[alloc.id];
+
           return (
             <div key={alloc.id} className="p-6 hover:bg-gray-50 transition-colors">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium text-gray-900 truncate">{subjectName}</p>
                     {isComplete && (
                       <span title="Planned time completed" className="inline-flex items-center">
                         <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
                       </span>
                     )}
-                    {alloc.explanation_code && (
+                    {explanation.badgeText && (
                       <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600 capitalize">
-                        {alloc.explanation_code.replace(/_/g, ' ')}
+                        {explanation.badgeText}
                       </span>
                     )}
                   </div>
@@ -259,6 +358,20 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
                       Target: {alloc.snapshot_state.subject_target}%
                     </p>
                   )}
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-controls={`alloc-explanation-${alloc.id}`}
+                    onClick={() => toggleExplanation(alloc.id)}
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors mt-1.5 focus:outline-none focus:underline"
+                  >
+                    <span>Why this allocation?</span>
+                    {isExpanded ? (
+                      <ChevronUp className="h-3 w-3" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                  </button>
                 </div>
 
                 <div className="flex flex-col sm:items-end gap-1 sm:w-64">
@@ -307,6 +420,25 @@ export default function StudyPlanProgress({ subjectMap = {} }: StudyPlanProgress
                   </button>
                 </div>
               </div>
+
+              {isExpanded && (
+                <div
+                  id={`alloc-explanation-${alloc.id}`}
+                  className="mt-3 rounded-md bg-gray-50 p-3 text-xs text-gray-700 border border-gray-100"
+                >
+                  <p className="font-medium text-gray-800">{explanation.summary}</p>
+                  {explanation.details.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-gray-600">
+                      {explanation.details.map((detail, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                          {detail}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
