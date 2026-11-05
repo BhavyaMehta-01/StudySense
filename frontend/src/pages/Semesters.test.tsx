@@ -11,6 +11,7 @@ vi.mock('@/api/client', () => ({
     get: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
+    patch: vi.fn(),
   }
 }));
 
@@ -42,16 +43,72 @@ describe('Semesters', () => {
     });
   });
 
-  test('renders list of semesters', async () => {
+  test('renders list of semesters with active indicator', async () => {
     (api.get as any).mockResolvedValue([
-      { id: '1', name: 'Fall 2026', academic_year: '2026' }
+      { id: '1', name: 'Fall 2026', academic_year: '2026', is_active: true },
+      { id: '2', name: 'Spring 2027', academic_year: '2027', is_active: false }
     ]);
     
     render(<Semesters />, { wrapper: Wrapper });
     
     await waitFor(() => {
       expect(screen.getByText('Fall 2026')).not.toBeNull();
-      expect(screen.getByText('2026')).not.toBeNull();
+      expect(screen.getByText('Spring 2027')).not.toBeNull();
+      expect(screen.getByText('Active')).not.toBeNull();
+      expect(screen.getByRole('button', { name: /activate/i })).not.toBeNull();
+    });
+  });
+
+  test('activates semester and invalidates queries', async () => {
+    (api.get as any).mockResolvedValue([
+      { id: '1', name: 'Fall 2026', academic_year: '2026', is_active: false }
+    ]);
+    (api.patch as any).mockResolvedValueOnce({
+      id: '1',
+      name: 'Fall 2026',
+      academic_year: '2026',
+      is_active: true,
+    });
+
+    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(<Semesters />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fall 2026')).not.toBeNull();
+    });
+
+    const activateBtn = screen.getByRole('button', { name: /activate/i });
+    fireEvent.click(activateBtn);
+
+    await waitFor(() => {
+      expect(api.patch).toHaveBeenCalledWith('/semesters/1/activate');
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['semesters'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['study-plans'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['subjects'] });
+    });
+
+    invalidateQueriesSpy.mockRestore();
+  });
+
+  test('displays error message when activation fails', async () => {
+    (api.get as any).mockResolvedValue([
+      { id: '1', name: 'Fall 2026', academic_year: '2026', is_active: false }
+    ]);
+    (api.patch as any).mockRejectedValueOnce(new Error('Failed to activate semester'));
+
+    render(<Semesters />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fall 2026')).not.toBeNull();
+    });
+
+    const activateBtn = screen.getByRole('button', { name: /activate/i });
+    fireEvent.click(activateBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to activate semester')).not.toBeNull();
     });
   });
 

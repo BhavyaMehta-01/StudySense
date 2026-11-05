@@ -22,9 +22,26 @@ export default function Semesters() {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
 
+  const [activatingId, setActivatingId] = useState<string | null>(null);
+
   const { data: semesters, isLoading } = useQuery<Semester[]>({
     queryKey: ['semesters'],
     queryFn: () => api.get('/semesters'),
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/semesters/${id}/activate`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['semesters'] });
+      queryClient.invalidateQueries({ queryKey: ['study-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      setActivatingId(null);
+    },
+    onError: (err: any) => {
+      setError(err?.data?.detail || err.message || 'Failed to activate semester');
+      setActivatingId(null);
+    },
   });
 
   const createMutation = useMutation({
@@ -63,7 +80,14 @@ export default function Semesters() {
     createMutation.mutate(data);
   };
 
+  const handleActivate = (id: string) => {
+    setError('');
+    setActivatingId(id);
+    activateMutation.mutate(id);
+  };
+
   const handleDelete = (id: string) => {
+    setError('');
     if (window.confirm('Are you sure you want to delete this semester? This will delete all associated subjects and assessments.')) {
       deleteMutation.mutate(id);
     }
@@ -141,21 +165,38 @@ export default function Semesters() {
             >
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    <Link to={`/app/semesters/${semester.id}`} className="focus:outline-none">
-                      <span className="absolute inset-0" aria-hidden="true" />
-                      {semester.name}
-                    </Link>
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      <Link to={`/app/semesters/${semester.id}`} className="focus:outline-none">
+                        <span className="absolute inset-0" aria-hidden="true" />
+                        {semester.name}
+                      </Link>
+                    </h3>
+                    {semester.is_active && (
+                      <span className="relative z-10 inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                        Active
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500">{semester.academic_year}</p>
                 </div>
               </div>
-              <div className="mt-4 flex gap-2 relative z-10">
+              <div className="mt-4 flex items-center gap-2 relative z-10">
+                {!semester.is_active && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleActivate(semester.id)}
+                    disabled={activateMutation.isPending}
+                  >
+                    {activateMutation.isPending && activatingId === semester.id ? 'Activating...' : 'Activate'}
+                  </Button>
+                )}
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() => handleDelete(semester.id)}
-                  disabled={deleteMutation.isPending}
+                  disabled={deleteMutation.isPending || (activateMutation.isPending && activatingId === semester.id)}
                 >
                   Delete
                 </Button>
