@@ -60,12 +60,14 @@ def get_dashboard(
         if completed_weight > 0:
             completed_work_percentage = (earned_points / completed_weight) * Decimal('100.0')
             
-        classes_attended = sum(att.classes_attended for att in subject.attendances)
-        classes_held = sum(att.classes_held for att in subject.attendances)
-        
-        attendance_percentage = None
-        if classes_held > 0:
-            attendance_percentage = (Decimal(classes_attended) / Decimal(classes_held)) * Decimal('100.0')
+        if subject.lecture_attendances:
+            attended_count = sum(1 for la in subject.lecture_attendances if la.status == "attended")
+            held_count = sum(1 for la in subject.lecture_attendances if la.status in ("attended", "missed"))
+            attendance_percentage = (Decimal(attended_count) / Decimal(held_count) * Decimal('100.0')) if held_count > 0 else None
+        else:
+            classes_attended = sum(att.classes_attended for att in subject.attendances)
+            classes_held = sum(att.classes_held for att in subject.attendances)
+            attendance_percentage = (Decimal(classes_attended) / Decimal(classes_held) * Decimal('100.0')) if classes_held > 0 else None
             
         subject_summaries.append(SubjectSummary(
             semester_id=str(subject.semester_id),

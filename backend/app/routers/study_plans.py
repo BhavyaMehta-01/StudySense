@@ -39,6 +39,24 @@ def get_active_study_plan(
 
     return plan
 
+@router.get("", response_model=List[schemas.StudyPlanResponse])
+def get_study_plans(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Retrieve all study plans (active and historical) for the current user,
+    ordered by start_date descending.
+    """
+    return db.query(models.StudyPlan).options(
+        selectinload(models.StudyPlan.allocations)
+    ).filter(
+        models.StudyPlan.user_id == current_user.id
+    ).order_by(
+        models.StudyPlan.start_date.desc(),
+        models.StudyPlan.created_at.desc()
+    ).all()
+
 @router.post("", response_model=schemas.StudyPlanResponse)
 def create_study_plan(
     plan_in: schemas.StudyPlanCreate,

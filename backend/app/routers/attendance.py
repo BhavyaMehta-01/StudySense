@@ -35,6 +35,26 @@ def update_attendance(
 ):
     attendance = get_attendance_or_404(db, attendance_id, current_user.id)
     update_data = attendance_in.model_dump(exclude_unset=True)
+
+    target_attended = update_data.get("classes_attended", attendance.classes_attended)
+    target_held = update_data.get("classes_held", attendance.classes_held)
+
+    if target_held is not None and target_held <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Classes held must be greater than zero."
+        )
+    if target_attended is not None and target_attended < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Must be integer ≥ 0."
+        )
+    if target_attended is not None and target_held is not None and target_attended > target_held:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Classes attended cannot exceed classes held"
+        )
+
     for key, value in update_data.items():
         setattr(attendance, key, value)
     

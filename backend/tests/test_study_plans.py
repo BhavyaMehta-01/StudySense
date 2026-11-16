@@ -557,3 +557,13 @@ def test_deactivate_study_plan_preserves_historical_sessions(db_session):
     assert sessions_list[0]["id"] == sess_id
     assert sessions_list[0]["allocation_id"] == alloc_id
     assert sessions_list[0]["duration_minutes"] == 45
+
+    # Historical plan is also accessible via GET /study-plans
+    all_plans_resp = client.get("/study-plans", headers=headers)
+    assert all_plans_resp.status_code == 200
+    all_plans = all_plans_resp.json()
+    assert len(all_plans) >= 1
+    matching = [p for p in all_plans if p["id"] == plan_id]
+    assert len(matching) == 1
+    assert matching[0]["is_active"] is False
+    assert len(matching[0]["allocations"]) == 1

@@ -40,6 +40,11 @@ def get_or_create_subject(db: Session, semester_id: str, name: str) -> models.Su
         db.flush()
     return sub
 
+REQUIRED_HEADERS = {
+    "academic": ["semester", "subject", "assessment", "category", "max_marks"],
+    "attendance": ["semester", "subject", "classes_attended", "classes_held", "recorded_on"],
+}
+
 @router.post("/csv", response_model=ImportResponse)
 def import_csv(
     file: UploadFile = File(...),
@@ -52,7 +57,37 @@ def import_csv(
         raise HTTPException(status_code=400, detail="Invalid import_type. Must be 'academic' or 'attendance'.")
 
     content = file.file.read().decode("utf-8")
+    if not content or not content.strip():
+        missing_str = ", ".join(REQUIRED_HEADERS[import_type])
+        return ImportResponse(
+            success=False,
+            total_processed=0,
+            imported_records=0,
+            errors=[ImportError(row=1, column=missing_str, message=f"CSV file is empty. Missing required header(s): {missing_str}")]
+        )
+
     reader = csv.DictReader(io.StringIO(content))
+    if not reader.fieldnames:
+        missing_str = ", ".join(REQUIRED_HEADERS[import_type])
+        return ImportResponse(
+            success=False,
+            total_processed=0,
+            imported_records=0,
+            errors=[ImportError(row=1, column=missing_str, message=f"Missing required header(s): {missing_str}")]
+        )
+
+    reader.fieldnames = [name.strip() for name in reader.fieldnames if name is not None]
+    present_headers = set(reader.fieldnames)
+    missing_headers = [h for h in REQUIRED_HEADERS[import_type] if h not in present_headers]
+
+    if missing_headers:
+        missing_str = ", ".join(missing_headers)
+        return ImportResponse(
+            success=False,
+            total_processed=0,
+            imported_records=0,
+            errors=[ImportError(row=1, column=missing_str, message=f"Missing required header(s): {missing_str}")]
+        )
 
     errors = []
     processed = 0
@@ -105,30 +140,30 @@ def import_csv(
 
             try:
                 max_marks = Decimal(max_marks_str)
-                if max_marks <= 0:
+                if max_marks <= 0 or max_marks % Decimal('0.5') != 0:
                     raise ValueError
             except:
-                errors.append(ImportError(row=row_num, column="max_marks", message="Invalid max_marks (must be > 0)"))
+                errors.append(ImportError(row=row_num, column="max_marks", message="Invalid max_marks (must be > 0 and in increments of 0.5)"))
                 continue
 
             marks = None
             if row.get("marks"):
                 try:
                     marks = Decimal(row.get("marks"))
-                    if marks < 0 or marks > max_marks:
+                    if marks < 0 or marks > max_marks or marks % Decimal('0.5') != 0:
                         raise ValueError
                 except:
-                    errors.append(ImportError(row=row_num, column="marks", message="Invalid marks (must be between 0 and max_marks)"))
+                    errors.append(ImportError(row=row_num, column="marks", message="Invalid marks (must be between 0 and max_marks in increments of 0.5)"))
                     continue
 
             weightage = None
             if row.get("weightage"):
                 try:
                     weightage = Decimal(row.get("weightage"))
-                    if weightage <= 0 or weightage > 100:
+                    if weightage <= 0 or weightage > 100 or weightage % Decimal('0.5') != 0:
                         raise ValueError
                 except:
-                    errors.append(ImportError(row=row_num, column="weightage", message="Invalid weightage (must be > 0 and <= 100)"))
+                    errors.append(ImportError(row=row_num, column="weightage", message="Invalid weightage (must be > 0 and <= 100 in increments of 0.5)"))
                     continue
 
             if weightage:
@@ -164,6 +199,9 @@ def import_csv(
             if status == "scored" and marks is None:
                 errors.append(ImportError(row=row_num, column="marks", message="Marks are required when status is 'scored'"))
                 continue
+            if status in ("pending", "absent", "exempt") and marks is not None:
+                errors.append(ImportError(row=row_num, column="marks", message=f"{status.capitalize()} assessments must not contain marks"))
+                continue
 
             # Check for duplicate assessment in this subject
             existing = db.query(models.Assessment).filter_by(subject_id=sub.id, name=ass_name).first()
@@ -185,12 +223,19 @@ def import_csv(
             imported += 1
 
         elif import_type == "attendance":
+            att_raw = row.get("classes_attended")
+            held_raw = row.get("classes_held")
+
+            if att_raw is None or str(att_raw).strip() == "" or held_raw is None or str(held_raw).strip() == "":
+                errors.append(ImportError(row=row_num, column="classes", message="classes_attended and classes_held are required"))
+                continue
+
             try:
-                att = int(row.get("classes_attended", 0))
-                held = int(row.get("classes_held", 0))
+                att = int(str(att_raw).strip())
+                held = int(str(held_raw).strip())
                 if att < 0 or held <= 0 or att > held:
                     raise ValueError
-            except:
+            except ValueError:
                 errors.append(ImportError(row=row_num, column="classes", message="Invalid attendance values (attended >= 0, held > 0, attended <= held)"))
                 continue
 
@@ -215,13 +260,12 @@ def import_csv(
             imported += 1
 
     # Commit or Rollback
-    if dry_run or len(errors) > 0:
+    success = len(errors) == 0
+    if dry_run or not success:
         db.rollback()
-        success = False
     else:
         try:
             db.commit()
-            success = True
         except IntegrityError:
             db.rollback()
             errors.append(ImportError(row=0, column="database", message="Database integrity error during commit"))

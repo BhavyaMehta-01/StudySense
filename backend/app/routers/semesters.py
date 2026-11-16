@@ -54,6 +54,15 @@ def update_semester(
 ):
     semester = get_semester_or_404(db, semester_id, current_user.id)
     update_data = semester_in.model_dump(exclude_unset=True)
+
+    target_start = update_data.get("start_date", semester.start_date)
+    target_end = update_data.get("end_date", semester.end_date)
+    if target_start is not None and target_end is not None and target_end < target_start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_date cannot be before start_date"
+        )
+
     for key, value in update_data.items():
         setattr(semester, key, value)
     db.commit()

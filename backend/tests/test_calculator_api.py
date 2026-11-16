@@ -119,3 +119,83 @@ def test_calculator_api_impossible_target(db_session: Session):
     data = response.json()
     assert data["impossible"] is True
     assert data["target_achieved"] is False
+
+
+def test_calculator_api_unallocated_remaining_weight(db_session: Session):
+    _, token, user = get_token_for_user(db_session, "user_repro@example.com", "User Repro")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sem = Semester(name="Semester 4", academic_year="2026-2027", user_id=user.id)
+    db_session.add(sem)
+    db_session.commit()
+
+    subj = Subject(name="Digital Electronics", code="DE201", credits=4.0, semester_id=sem.id)
+    db_session.add(subj)
+    db_session.commit()
+
+    # Exact reproduction scenario: only 1 scored assessment exists, no pending assessments
+    ass = Assessment(
+        name="Digital Electronics Test 1",
+        category="internal_test",
+        max_marks=25.0,
+        marks=20.0,
+        weightage=20.0,
+        status="scored",
+        subject_id=subj.id,
+    )
+    db_session.add(ass)
+    db_session.commit()
+
+    response = client.post(
+        f"/subjects/{subj.id}/calculate-required",
+        json={"target_percentage": 75.0},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert float(data["earned_points"]) == 16.0
+    assert float(data["remaining_weight"]) == 80.0
+    assert float(data["required_points_from_remaining"]) == 59.0
+    assert round(float(data["required_remaining_percentage"]), 2) == 73.75
+    assert data["impossible"] is False
+    assert data["target_achieved"] is False
+
+
+def test_calculator_api_target_percentage_validation(db_session: Session):
+    _, token, user = get_token_for_user(db_session, "target_val@example.com", "Target Val User")
+    subj = setup_academic_data(db_session, user)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # -1 should be rejected
+    res_neg = client.post(
+        f"/subjects/{subj.id}/calculate-required",
+        json={"target_percentage": -1},
+        headers=headers,
+    )
+    assert res_neg.status_code == 422
+
+    # 101 should be rejected
+    res_over = client.post(
+        f"/subjects/{subj.id}/calculate-required",
+        json={"target_percentage": 101},
+        headers=headers,
+    )
+    assert res_over.status_code == 422
+
+    # 0 should be accepted
+    res_zero = client.post(
+        f"/subjects/{subj.id}/calculate-required",
+        json={"target_percentage": 0},
+        headers=headers,
+    )
+    assert res_zero.status_code == 200
+    assert res_zero.json()["target_achieved"] is True
+
+    # 100 should be accepted
+    res_hundred = client.post(
+        f"/subjects/{subj.id}/calculate-required",
+        json={"target_percentage": 100},
+        headers=headers,
+    )
+    assert res_hundred.status_code == 200

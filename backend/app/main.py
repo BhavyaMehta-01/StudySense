@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .routers import auth, semesters, subjects, assessments, attendance, consent, dashboard, import_csv, study_plans, study_sessions
+from .routers import auth, semesters, subjects, assessments, attendance, consent, dashboard, import_csv, study_plans, study_sessions, timetable
 
 app = FastAPI(title=settings.project_name)
 
@@ -18,6 +18,7 @@ app.include_router(semesters.router)
 app.include_router(subjects.router)
 app.include_router(assessments.router)
 app.include_router(attendance.router)
+app.include_router(timetable.router)
 app.include_router(consent.router)
 app.include_router(dashboard.router)
 app.include_router(import_csv.router)

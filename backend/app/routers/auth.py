@@ -19,7 +19,8 @@ def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)):
     user = User(
         email=email_normalized,
         password_hash=get_password_hash(user_in.password),
-        name=user_in.name
+        name=user_in.name,
+        timezone=user_in.timezone
     )
     db.add(user)
     try:
@@ -59,3 +60,15 @@ def login(user_in: schemas.UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=schemas.SafeUserResponse)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.patch("/me/timezone", response_model=schemas.SafeUserResponse)
+def update_user_timezone(
+    tz_in: schemas.UserTimezoneUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    current_user.timezone = tz_in.timezone
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
