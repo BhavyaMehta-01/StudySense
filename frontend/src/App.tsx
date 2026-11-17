@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { ThemeProvider } from './hooks/useTheme';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import AppLayout from './layouts/AppLayout';
@@ -44,41 +45,39 @@ function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-            
-            <Route path="/login" element={
-              <RedirectIfAuthenticated>
-                <Login />
-              </RedirectIfAuthenticated>
-            } />
-            
-            <Route path="/register" element={
-              <RedirectIfAuthenticated>
-                <Register />
-              </RedirectIfAuthenticated>
-            } />
-            
-            <Route path="/app" element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }>
-              <Route path="" element={<Navigate to="/app/dashboard" replace />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="semesters" element={<Semesters />} />
-              <Route path="semesters/:semesterId" element={<SemesterDetail />} />
-              <Route path="semesters/:semesterId/subjects/:subjectId" element={<SubjectDetail />} />
-              <Route path="import" element={<Import />} />
-              <Route path="settings" element={<Settings />} />
-            </Route>
-            
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
+              <Route path="/login" element={
+                <RedirectIfAuthenticated>
+                  <Login />
+                </RedirectIfAuthenticated>
+              } />
+              <Route path="/register" element={
+                <RedirectIfAuthenticated>
+                  <Register />
+                </RedirectIfAuthenticated>
+              } />
+              <Route path="/app" element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }>
+                <Route path="" element={<Navigate to="/app/dashboard" replace />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="semesters" element={<Semesters />} />
+                <Route path="semesters/:semesterId" element={<SemesterDetail />} />
+                <Route path="semesters/:semesterId/subjects/:subjectId" element={<SubjectDetail />} />
+                <Route path="import" element={<Import />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

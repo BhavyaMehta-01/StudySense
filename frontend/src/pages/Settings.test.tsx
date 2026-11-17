@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { ThemeProvider } from '@/hooks/useTheme';
 import Settings, { CONSENT_TEXT_VERSION } from './Settings';
 
 vi.mock('@/api/client', () => ({
@@ -11,10 +12,12 @@ vi.mock('@/api/client', () => ({
   }
 }));
 
-describe('Settings Page - Data Donation Consent', () => {
+describe('Settings Page - Data Donation Consent & Theme', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.className = '';
     vi.clearAllMocks();
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -24,7 +27,9 @@ describe('Settings Page - Data Donation Consent', () => {
   const renderComponent = () => {
     return render(
       <QueryClientProvider client={queryClient}>
-        <Settings />
+        <ThemeProvider>
+          <Settings />
+        </ThemeProvider>
       </QueryClientProvider>
     );
   };
@@ -35,7 +40,7 @@ describe('Settings Page - Data Donation Consent', () => {
     expect(screen.getByText('Loading settings...')).toBeInTheDocument();
   });
 
-  test('displays opted-out state correctly', async () => {
+  test('displays opted-out state with amber badge correctly', async () => {
     (api.get as any).mockResolvedValue({
       data_donation_consent: false,
       consent_updated_at: null,
@@ -44,14 +49,15 @@ describe('Settings Page - Data Donation Consent', () => {
 
     renderComponent();
 
-    await waitFor(() => {
-      expect(screen.getByText('Opted Out')).toBeInTheDocument();
-    });
+    const badge = await screen.findByText('Opted Out');
+    expect(badge).toBeInTheDocument();
+    expect(badge.className).toContain('text-amber-600');
+    expect(badge.className).toContain('bg-amber-500/10');
     
     expect(screen.getByRole('button', { name: 'Opt In' })).toBeInTheDocument();
   });
 
-  test('displays opted-in state correctly', async () => {
+  test('displays opted-in state with emerald badge and timestamp correctly', async () => {
     (api.get as any).mockResolvedValue({
       data_donation_consent: true,
       consent_updated_at: '2023-10-01T12:00:00Z',
@@ -60,10 +66,12 @@ describe('Settings Page - Data Donation Consent', () => {
 
     renderComponent();
 
-    await waitFor(() => {
-      expect(screen.getByText('Opted In')).toBeInTheDocument();
-    });
+    const badge = await screen.findByText('Opted In');
+    expect(badge).toBeInTheDocument();
+    expect(badge.className).toContain('text-emerald-600');
+    expect(badge.className).toContain('bg-emerald-500/10');
     
+    expect(screen.getByText(/Last updated:/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Opt Out' })).toBeInTheDocument();
   });
 
@@ -118,5 +126,36 @@ describe('Settings Page - Data Donation Consent', () => {
       expect(screen.getByText('Opted Out')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Opt In' })).toBeInTheDocument();
     });
+  });
+
+  test('allows switching appearance themes between light, dark, and system', async () => {
+    (api.get as any).mockResolvedValue({
+      data_donation_consent: false,
+      consent_updated_at: null,
+      consent_text_version: null,
+    });
+
+    renderComponent();
+
+    const lightBtn = await screen.findByRole('button', { name: /light/i });
+    const darkBtn = screen.getByRole('button', { name: /dark/i });
+    const systemBtn = screen.getByRole('button', { name: /system/i });
+
+    // Initially system theme is active
+    expect(systemBtn).toHaveAttribute('aria-pressed', 'true');
+
+    // Click Dark
+    fireEvent.click(darkBtn);
+    expect(darkBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(systemBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(localStorage.getItem('studysense-theme')).toBe('dark');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+
+    // Click Light
+    fireEvent.click(lightBtn);
+    expect(lightBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(darkBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(localStorage.getItem('studysense-theme')).toBe('light');
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });

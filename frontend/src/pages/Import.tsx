@@ -89,31 +89,31 @@ export default function Import() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Import CSV</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-2xl font-bold tracking-tight text-foreground">Import CSV</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           Upload a CSV file to bulk import your academic data or attendance records.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="space-y-6 rounded-xl border border-border bg-card/85 backdrop-blur-md p-6 shadow-xs text-card-foreground">
           <div className="space-y-4">
             <div>
-              <Label htmlFor="import_type">Import Type</Label>
+              <Label htmlFor="import_type" className="text-foreground">Import Type</Label>
               <select
                 id="import_type"
                 value={importType}
                 onChange={handleTypeChange}
                 disabled={isLoading}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1.5 block w-full rounded-md border border-input bg-card text-foreground px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <option value="academic">Academic (Assessments, Marks)</option>
-                <option value="attendance">Attendance</option>
+                <option value="academic" className="bg-card text-foreground">Academic (Assessments, Marks)</option>
+                <option value="attendance" className="bg-card text-foreground">Attendance</option>
               </select>
             </div>
 
             <div>
-              <Label htmlFor="csv_file">CSV File</Label>
+              <Label htmlFor="csv_file" className="text-foreground">CSV File</Label>
               <input
                 id="csv_file"
                 type="file"
@@ -121,11 +121,11 @@ export default function Import() {
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 disabled={isLoading}
-                className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                className="mt-1.5 block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20 file:transition-colors file:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               />
               {file && (
-                <p className="mt-2 text-sm text-gray-600">
-                  Selected file: <span className="font-medium">{file.name}</span>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Selected file: <span className="font-medium text-foreground">{file.name}</span>
                 </p>
               )}
             </div>
@@ -142,14 +142,14 @@ export default function Import() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-6">
-          <h3 className="text-sm font-medium text-gray-900 mb-2">Expected CSV Columns</h3>
+        <div className="rounded-xl border border-border bg-card/60 backdrop-blur-md p-6 text-card-foreground">
+          <h3 className="text-sm font-semibold text-foreground mb-2">Expected CSV Columns</h3>
           {importType === 'academic' ? (
-            <code className="block text-xs text-gray-600 bg-white p-3 rounded border border-gray-200 overflow-x-auto whitespace-nowrap">
+            <code className="block text-xs text-muted-foreground bg-muted/60 p-3 rounded-lg border border-border/60 overflow-x-auto whitespace-nowrap font-mono">
               semester, subject, assessment, category, status, max_marks, marks, weightage, scheduled_date
             </code>
           ) : (
-            <code className="block text-xs text-gray-600 bg-white p-3 rounded border border-gray-200 overflow-x-auto whitespace-nowrap">
+            <code className="block text-xs text-muted-foreground bg-muted/60 p-3 rounded-lg border border-border/60 overflow-x-auto whitespace-nowrap font-mono">
               semester, subject, classes_attended, classes_held, recorded_on
             </code>
           )}
@@ -157,25 +157,25 @@ export default function Import() {
       </div>
 
       {apiError && (
-        <div className="rounded-lg bg-red-50 p-4 border border-red-200">
-          <h3 className="text-sm font-medium text-red-800">API Error</h3>
-          <p className="mt-1 text-sm text-red-700">{apiError}</p>
+        <div role="alert" className="rounded-xl bg-destructive/10 p-4 border border-destructive/20 text-destructive">
+          <h3 className="text-sm font-semibold">API Error</h3>
+          <p className="mt-1 text-sm opacity-90">{apiError}</p>
         </div>
       )}
 
       {hasPreviewSuccess && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-6 shadow-sm">
-          <h3 className="text-lg font-medium text-green-900">Preview Successful</h3>
-          <p className="mt-1 text-sm text-green-700 mb-4">
+        <div className="rounded-xl border border-success/30 bg-success/10 p-6 shadow-xs">
+          <h3 className="text-lg font-semibold text-foreground">Preview Successful</h3>
+          <p className="mt-1 text-sm text-muted-foreground mb-4">
             No errors found. Found {previewResult.total_processed} rows. {previewResult.imported_records} records will be imported.
             <br />
-            <strong>No data has been committed yet.</strong>
+            <strong className="text-foreground">No data has been committed yet.</strong>
           </p>
           
           <Button 
             onClick={() => confirmMutation.mutate()} 
             disabled={isLoading}
-            className="bg-green-600 hover:bg-green-700 text-white"
+            className="bg-success text-success-foreground hover:bg-success/90"
           >
             {isConfirming ? 'Importing...' : 'Confirm Import'}
           </Button>
@@ -183,28 +183,28 @@ export default function Import() {
       )}
 
       {hasPreviewErrors && (
-        <div className="rounded-lg border border-red-200 bg-white shadow-sm overflow-hidden">
-          <div className="bg-red-50 px-6 py-4 border-b border-red-200">
-            <h3 className="text-lg font-medium text-red-900">Validation Errors</h3>
-            <p className="mt-1 text-sm text-red-700">
-              Found {previewResult.errors.length} error(s). Nothing was imported.
+        <div className="rounded-xl border border-destructive/30 bg-card/85 backdrop-blur-md shadow-xs overflow-hidden text-card-foreground">
+          <div className="bg-destructive/10 px-6 py-4 border-b border-destructive/20">
+            <h3 className="text-lg font-semibold text-destructive">Validation Errors</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Found <span className="font-semibold text-destructive tabular-nums">{previewResult.errors.length}</span> error(s). Nothing was imported.
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-gray-600">
-              <thead className="bg-gray-50 text-gray-900 text-xs uppercase">
+            <table className="w-full text-left text-sm text-foreground">
+              <thead className="bg-muted/50 text-muted-foreground text-xs uppercase border-b border-border">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Row</th>
-                  <th className="px-6 py-3 font-medium">Column</th>
-                  <th className="px-6 py-3 font-medium">Message</th>
+                  <th className="px-6 py-3 font-semibold">Row</th>
+                  <th className="px-6 py-3 font-semibold">Column</th>
+                  <th className="px-6 py-3 font-semibold">Message</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {previewResult.errors.map((error, idx) => (
-                  <tr key={idx}>
-                    <td className="px-6 py-4">{error.row}</td>
-                    <td className="px-6 py-4 font-mono text-xs">{error.column || '-'}</td>
-                    <td className="px-6 py-4 text-red-600">{error.message}</td>
+                  <tr key={idx} className="hover:bg-muted/40 transition-colors">
+                    <td className="px-6 py-4 tabular-nums font-medium">{error.row}</td>
+                    <td className="px-6 py-4 font-mono text-xs text-muted-foreground">{error.column || '-'}</td>
+                    <td className="px-6 py-4 text-destructive font-medium">{error.message}</td>
                   </tr>
                 ))}
               </tbody>
