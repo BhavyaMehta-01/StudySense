@@ -91,13 +91,65 @@ describe('Dashboard', () => {
     // Check subject data
     expect(screen.getByText('Database Systems')).not.toBeNull();
     expect(screen.getByText('Fall 2026')).not.toBeNull();
+    expect(screen.getByText('Earned Points')).not.toBeNull();
+    expect(screen.getByText('Current Average')).not.toBeNull();
+    expect(screen.getByText('Course Completion')).not.toBeNull();
+    expect(screen.getByText('Attendance')).not.toBeNull();
     expect(screen.getByText('85.50')).not.toBeNull(); // earned points
-    expect(screen.getByText('86%')).not.toBeNull(); // 85.5 rounded
-    expect(screen.getByText('90%')).not.toBeNull(); // 90.0 rounded
+    expect(screen.getByText('86%')).not.toBeNull(); // 85.5 Current Average rounded
+    expect(screen.getByText('100%')).not.toBeNull(); // 100.0 Course Completion
+    expect(screen.getByText('90%')).not.toBeNull(); // 90.0 attendance rounded
 
     // Check that link is correct
     const link = screen.getByRole('link');
     expect(link.getAttribute('href')).toBe('/app/semesters/sem-123/subjects/sub-456');
+  });
+
+  test('renders Current Average and Course Completion for the QA reproduction scenario', async () => {
+    (api.get as any).mockResolvedValue({
+      total_semesters: 1,
+      total_subjects: 2,
+      subject_summaries: [
+        {
+          semester_id: 'sem-1',
+          semester_name: 'Fall 2026',
+          subject_id: 'sub-de',
+          subject_name: 'Digital Electronics',
+          earned_points: '24.00',
+          completed_weight: '50.00',
+          pending_weight: '10.00',
+          completed_work_percentage: '48.00',
+          attendance_percentage: '85.00',
+        },
+        {
+          semester_id: 'sem-1',
+          semester_name: 'Fall 2026',
+          subject_id: 'sub-new',
+          subject_name: 'New Course',
+          earned_points: '0.00',
+          completed_weight: '0.00',
+          pending_weight: '50.00',
+          completed_work_percentage: null,
+          attendance_percentage: null,
+        },
+      ],
+    });
+
+    render(<Dashboard />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Digital Electronics')).not.toBeNull();
+    });
+
+    // Digital Electronics QA scenario checks
+    expect(screen.getByText('24.00')).not.toBeNull(); // Earned Points
+    expect(screen.getByText('48%')).not.toBeNull();   // Current Average (24/50)
+    expect(screen.getByText('50%')).not.toBeNull();   // Course Completion (50% completed weight)
+
+    // New Course with no completed assessments checks
+    expect(screen.getByText('New Course')).not.toBeNull();
+    expect(screen.getByText('0%')).not.toBeNull();    // Course Completion (0%)
+    expect(screen.getAllByText('N/A').length).toBeGreaterThanOrEqual(2); // Current Average N/A, Attendance N/A
   });
 
   test('renders populated dashboard with study plan progress integrated', async () => {

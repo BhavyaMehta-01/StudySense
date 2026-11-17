@@ -831,4 +831,69 @@ describe('StudyPlanProgress', () => {
 
     expect(screen.getByText('60 minutes allocated for regular study in this subject.')).not.toBeNull();
   });
+
+  test('renders and toggles study plan history with logged sessions', async () => {
+    const pastPlan = {
+      id: 'past-plan-1',
+      start_date: '2026-10-12',
+      end_date: '2026-10-18',
+      available_minutes: 600,
+      is_active: false,
+      allocations: [
+        {
+          id: 'past-alloc-1',
+          plan_id: 'past-plan-1',
+          subject_id: 'sub-de',
+          allocated_minutes: 600,
+          snapshot_state: {},
+          explanation_code: 'REGULAR_ALLOCATION',
+        },
+      ],
+    };
+
+    const pastSessions = [
+      { id: 'sess-1', allocation_id: 'past-alloc-1', date: '2026-10-14', duration_minutes: 60, status: 'completed' },
+      { id: 'sess-2', allocation_id: 'past-alloc-1', date: '2026-10-15', duration_minutes: 30, status: 'partial' },
+    ];
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/semesters') {
+        return Promise.resolve([
+          { id: 'sem-1', name: 'Semester 4', academic_year: '2026', is_active: true },
+        ]);
+      }
+      if (url === '/study-plans/active') {
+        return Promise.reject(new (ApiError as any)(404, { detail: 'No active study plan found' }));
+      }
+      if (url === '/study-plans') {
+        return Promise.resolve([pastPlan]);
+      }
+      if (url === '/study-sessions') {
+        return Promise.resolve(pastSessions);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<StudyPlanProgress subjectMap={{ 'sub-de': 'Digital Electronics' }} />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Plan History/i)).not.toBeNull();
+      expect(screen.getByText(/1 past plan/i)).not.toBeNull();
+    });
+
+    // Toggle View History
+    const viewHistoryBtn = screen.getByRole('button', { name: /view history/i });
+    fireEvent.click(viewHistoryBtn);
+
+    expect(screen.getAllByText(/past plan/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Planned:/i)).not.toBeNull();
+    expect(screen.getByText(/Logged:/i)).not.toBeNull();
+
+    // Toggle View Details
+    const viewDetailsBtn = screen.getByRole('button', { name: /view details/i });
+    fireEvent.click(viewDetailsBtn);
+
+    expect(screen.getByText('Digital Electronics')).not.toBeNull();
+    expect(screen.getByText(/Logged Sessions \(2\)/i)).not.toBeNull();
+  });
 });

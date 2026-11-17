@@ -132,10 +132,10 @@ export default function GenerateStudyPlanForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
-      <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+      <div className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-blue-600" />
-          <h4 className="text-sm font-semibold text-gray-900">Create Weekly Study Plan</h4>
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h4 className="text-sm font-semibold text-foreground">Create Weekly Study Plan</h4>
         </div>
         {onClose && (
           <Button
@@ -144,27 +144,27 @@ export default function GenerateStudyPlanForm({
             size="sm"
             onClick={onClose}
             disabled={mutation.isPending}
-            className="text-xs text-gray-500 hover:text-gray-700"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             Cancel
           </Button>
         )}
       </div>
 
-      <p className="text-xs text-gray-500">
-        Generating plan for <span className="font-medium text-gray-700">{activeSemester.name}</span>. The allocation engine will distribute your available minutes across subjects based on assessment deadlines and grade targets.
+      <p className="text-xs text-muted-foreground">
+        Generating plan for <span className="font-semibold text-foreground">{activeSemester.name}</span>. The allocation engine will distribute your available minutes across subjects based on assessment deadlines and grade targets.
       </p>
 
       {formError && (
-        <div role="alert" className="flex items-start gap-2 rounded-md bg-red-50 p-3 text-sm text-red-700">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-600" />
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-destructive" />
           <span>{formError}</span>
         </div>
       )}
 
       {successMessage && (
-        <div role="status" className="flex items-start gap-2 rounded-md bg-green-50 p-3 text-sm text-green-700">
-          <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-success/20 bg-success/10 p-3 text-sm text-success">
+          <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0 text-success" />
           <span>{successMessage}</span>
         </div>
       )}
@@ -172,7 +172,7 @@ export default function GenerateStudyPlanForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* Start Date */}
         <div className="space-y-1.5">
-          <Label htmlFor="plan-start-date">Week Start (Monday)</Label>
+          <Label htmlFor="plan-start-date" className="text-foreground">Week Start (Monday)</Label>
           <Input
             id="plan-start-date"
             type="date"
@@ -181,12 +181,12 @@ export default function GenerateStudyPlanForm({
             disabled={mutation.isPending}
             required
           />
-          <p className="text-[11px] text-gray-500">Must be a Monday.</p>
+          <p className="text-[11px] text-muted-foreground">Must be a Monday.</p>
         </div>
 
         {/* End Date */}
         <div className="space-y-1.5">
-          <Label htmlFor="plan-end-date">Week End (Sunday)</Label>
+          <Label htmlFor="plan-end-date" className="text-foreground">Week End (Sunday)</Label>
           <Input
             id="plan-end-date"
             type="date"
@@ -195,12 +195,12 @@ export default function GenerateStudyPlanForm({
             disabled={mutation.isPending}
             required
           />
-          <p className="text-[11px] text-gray-500">Must be a Sunday.</p>
+          <p className="text-[11px] text-muted-foreground">Must be a Sunday.</p>
         </div>
 
         {/* Available Minutes */}
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="plan-available-minutes">Weekly Available Study Time (minutes)</Label>
+          <Label htmlFor="plan-available-minutes" className="text-foreground">Weekly Available Study Time (minutes)</Label>
           <Input
             id="plan-available-minutes"
             type="number"
@@ -215,7 +215,7 @@ export default function GenerateStudyPlanForm({
             placeholder="e.g. 600"
             required
           />
-          <p className="text-[11px] text-gray-500">
+          <p className="text-[11px] text-muted-foreground">
             Total available study time for the week (e.g. 600 min = 10 hours). Must be a positive integer divisible by 5.
           </p>
         </div>

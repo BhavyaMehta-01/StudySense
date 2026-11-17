@@ -1,5 +1,11 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { api, ApiError } from './client';
+import {
+  api,
+  ApiError,
+  subjectPatternQueryKey,
+  fetchSubjectPattern,
+  subjectPatternQueryOptions,
+} from './client';
 
 describe('API Client - patch helper', () => {
   beforeEach(() => {
@@ -67,3 +73,101 @@ describe('API Client - patch helper', () => {
     expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'auth-unauthorized' }));
   });
 });
+
+describe('Assessment Pattern query helpers', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  test('subjectPatternQueryKey formats key scoped to subject id', () => {
+    expect(subjectPatternQueryKey('subj-123')).toEqual(['subjects', 'subj-123', 'pattern']);
+  });
+
+  test('fetchSubjectPattern fetches active pattern when present', async () => {
+    localStorage.setItem('token', 'auth-token');
+
+    const mockPattern = {
+      id: 'pat-1',
+      subject_id: 'subj-123',
+      name: 'Standard Pattern',
+      is_active: true,
+      components: [
+        {
+          id: 'comp-1',
+          pattern_id: 'pat-1',
+          name: 'Midterm',
+          category: 'midsem',
+          max_marks: 50,
+          weightage: 30,
+          is_active: true,
+          order_index: 0,
+          created_at: '2026-09-01T00:00:00Z',
+          updated_at: null,
+        },
+      ],
+      created_at: '2026-09-01T00:00:00Z',
+      updated_at: null,
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue(mockPattern),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchSubjectPattern('subj-123');
+
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/subjects/subj-123/pattern', {
+      method: 'GET',
+      headers: expect.any(Headers),
+    });
+    expect(result).toEqual(mockPattern);
+  });
+
+  test('fetchSubjectPattern returns null when no active pattern exists', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue(null),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchSubjectPattern('subj-456');
+
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/subjects/subj-456/pattern', {
+      method: 'GET',
+      headers: expect.any(Headers),
+    });
+    expect(result).toBeNull();
+  });
+
+  test('fetchSubjectPattern throws ApiError on failure without swallowing error', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: vi.fn().mockResolvedValue({ detail: 'Subject not found' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSubjectPattern('nonexistent-subj')).rejects.toThrow(ApiError);
+  });
+
+  test('subjectPatternQueryOptions constructs valid options for React Query', async () => {
+    const options = subjectPatternQueryOptions('subj-789');
+    expect(options.queryKey).toEqual(['subjects', 'subj-789', 'pattern']);
+    expect(options.enabled).toBe(true);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue(null),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await options.queryFn();
+    expect(result).toBeNull();
+  });
+});
+

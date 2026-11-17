@@ -1,3 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
+import type { AssessmentPattern } from '@/types/api';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export class ApiError extends Error {
@@ -71,3 +74,20 @@ export const api = {
   }),
   delete: <T = any>(url: string): Promise<T> => fetchWithAuth(url, { method: 'DELETE' }),
 };
+
+export const subjectPatternQueryKey = (subjectId: string) => ['subjects', subjectId, 'pattern'] as const;
+
+export const fetchSubjectPattern = (subjectId: string): Promise<AssessmentPattern | null> => {
+  return api.get<AssessmentPattern | null>(`/subjects/${subjectId}/pattern`);
+};
+
+export const subjectPatternQueryOptions = (subjectId: string) => ({
+  queryKey: subjectPatternQueryKey(subjectId),
+  queryFn: () => fetchSubjectPattern(subjectId),
+  enabled: Boolean(subjectId),
+});
+
+export function useSubjectPattern(subjectId: string) {
+  return useQuery(subjectPatternQueryOptions(subjectId));
+}
+

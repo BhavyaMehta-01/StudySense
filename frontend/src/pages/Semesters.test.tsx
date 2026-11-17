@@ -157,6 +157,65 @@ describe('Semesters', () => {
     });
   });
 
+  test('validates semester end date is not before start date', async () => {
+    (api.get as any).mockResolvedValueOnce([]);
+
+    render(<Semesters />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText(/no semesters/i)).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /add semester/i }));
+
+    fireEvent.change(screen.getByLabelText(/semester name/i), { target: { value: 'Fall 2026' } });
+    fireEvent.change(screen.getByLabelText(/academic year/i), { target: { value: '2026' } });
+    fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: '2026-09-01' } });
+    fireEvent.change(screen.getByLabelText(/end date/i), { target: { value: '2026-08-01' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /create semester/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/end date cannot be before start date/i)).not.toBeNull();
+    });
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  test('creates semester with optional dates successfully', async () => {
+    (api.get as any).mockResolvedValueOnce([]);
+    (api.post as any).mockResolvedValueOnce({
+      id: '3',
+      name: 'Fall 2026',
+      academic_year: '2026',
+      start_date: '2026-09-01',
+      end_date: '2026-12-15'
+    });
+
+    render(<Semesters />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText(/no semesters/i)).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /add semester/i }));
+
+    fireEvent.change(screen.getByLabelText(/semester name/i), { target: { value: 'Fall 2026' } });
+    fireEvent.change(screen.getByLabelText(/academic year/i), { target: { value: '2026' } });
+    fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: '2026-09-01' } });
+    fireEvent.change(screen.getByLabelText(/end date/i), { target: { value: '2026-12-15' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /create semester/i }));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith('/semesters', {
+        name: 'Fall 2026',
+        academic_year: '2026',
+        start_date: '2026-09-01',
+        end_date: '2026-12-15'
+      });
+    });
+  });
+
   test('deletes semester and invalidates queries', async () => {
     (api.get as any).mockResolvedValueOnce([
       { id: '1', name: 'Fall 2026', academic_year: '2026' }

@@ -31,6 +31,8 @@ export interface Semester {
   id: string;
   name: string;
   academic_year: string;
+  start_date?: string | null;
+  end_date?: string | null;
   user_id: string;
   is_active: boolean;
   created_at: string;
@@ -43,6 +45,7 @@ export interface Subject {
   code: string | null;
   credits: number | null;
   target_percentage?: number | null;
+  attendance_target_percentage?: number;
   semester_id: string;
   created_at: string;
   updated_at: string | null;
@@ -70,6 +73,7 @@ export interface CalculatorResponse {
   impossible: boolean;
   required_remaining_percentage: number;
   required_points_from_remaining: number;
+  max_achievable_score?: number | string;
 }
 
 export interface Assessment {
@@ -82,9 +86,18 @@ export interface Assessment {
   scheduled_at: string | null;
   status: 'pending' | 'scored' | 'absent' | 'exempt';
   subject_id: string;
+  calendar_event_id?: string | null;
+  pattern_component_id?: string | null;
+  is_auto_generated?: boolean;
+  is_exempt?: boolean;
   created_at: string;
   updated_at: string | null;
 }
+
+export const isAssessmentExempt = (assessment?: { status?: string; is_exempt?: boolean } | null): boolean => {
+  if (!assessment) return false;
+  return assessment.status === 'exempt' || Boolean(assessment.is_exempt);
+};
 
 export interface ImportError {
   row: number;
@@ -164,3 +177,178 @@ export interface StudySession {
   created_at: string;
   updated_at: string | null;
 }
+
+export interface TimetableSlot {
+  id: string;
+  semester_id: string;
+  subject_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  effective_from: string;
+  effective_to: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface TimetableSlotCreate {
+  subject_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  effective_from: string;
+  effective_to?: string | null;
+}
+
+export interface TimetableSlotUpdate {
+  day_of_week?: number;
+  start_time?: string;
+  end_time?: string;
+  effective_from?: string;
+  effective_to?: string | null;
+}
+
+export interface AcademicCalendarEvent {
+  id: string;
+  semester_id: string;
+  title: string;
+  event_type: 'holiday' | 'non_working_day' | 'exam';
+  start_date: string;
+  end_date: string;
+  cancels_regular_classes: boolean;
+  subject_ids?: string[];
+  assessment_ids?: string[];
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface ExamSubjectComponentSelection {
+  subject_id: string;
+  pattern_component_id: string;
+}
+
+export interface AcademicCalendarEventCreate {
+  title: string;
+  event_type: 'holiday' | 'non_working_day' | 'exam';
+  start_date: string;
+  end_date: string;
+  cancels_regular_classes?: boolean;
+  subject_ids?: string[];
+  subject_components?: ExamSubjectComponentSelection[];
+}
+
+export interface AcademicCalendarEventUpdate {
+  title?: string;
+  event_type?: 'holiday' | 'non_working_day' | 'exam';
+  start_date?: string;
+  end_date?: string;
+  cancels_regular_classes?: boolean;
+  subject_ids?: string[];
+  subject_components?: ExamSubjectComponentSelection[];
+}
+
+export interface TimetableOverride {
+  id: string;
+  semester_id: string;
+  subject_id: string;
+  override_type: 'cancelled' | 'extra' | 'rescheduled';
+  timetable_slot_id: string | null;
+  original_date: string | null;
+  target_date: string;
+  start_time: string;
+  end_time: string;
+  note: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface TimetableOverrideCreate {
+  subject_id: string;
+  override_type: 'cancelled' | 'extra' | 'rescheduled';
+  target_date: string;
+  start_time: string;
+  end_time: string;
+  timetable_slot_id?: string | null;
+  original_date?: string | null;
+  note?: string | null;
+}
+
+export interface LectureAttendance {
+  id: string;
+  semester_id: string;
+  subject_id: string;
+  timetable_slot_id: string | null;
+  override_id: string | null;
+  lecture_date: string;
+  start_time: string;
+  end_time: string;
+  status: 'attended' | 'missed' | 'class_cancelled';
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface AttendanceMetrics {
+  attended: number;
+  missed: number;
+  held: number;
+  cancelled: number;
+  target_percentage: number;
+  percentage: number | null;
+  is_at_or_above_target: boolean;
+  classes_to_attend: number | null;
+  classes_can_miss: number | null;
+  impossible_to_reach_target: boolean;
+}
+
+export interface LectureOccurrence {
+  lecture_date: string;
+  start_time: string;
+  end_time: string;
+  subject_id: string;
+  occurrence_type: 'regular' | 'extra' | 'rescheduled' | 'historical';
+  is_cancelled: boolean;
+  cancellation_reason?: string | null;
+  timetable_slot_id?: string | null;
+  override_id?: string | null;
+  attendance_id?: string | null;
+  attendance_status?: 'attended' | 'missed' | 'class_cancelled' | null;
+}
+
+export type AssessmentPatternCategory =
+  | 'internal_test'
+  | 'assignment'
+  | 'quiz'
+  | 'practical'
+  | 'viva'
+  | 'project'
+  | 'midsem'
+  | 'endsem'
+  | 'other';
+
+export interface AssessmentPatternComponent {
+  id: string;
+  pattern_id: string;
+  name: string;
+  category: AssessmentPatternCategory;
+  max_marks: number;
+  weightage: number;
+  is_active: boolean;
+  order_index: number;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export type AssessmentPatternComponentResponse = AssessmentPatternComponent;
+
+export interface AssessmentPattern {
+  id: string;
+  subject_id: string;
+  name: string;
+  is_active: boolean;
+  components: AssessmentPatternComponent[];
+  created_at: string;
+  updated_at: string | null;
+}
+
+export type AssessmentPatternResponse = AssessmentPattern;
+
